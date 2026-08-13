@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: glibc
+  version: 2.44
+  release: 1
+  summary: GNU C Library
+  homepage: https://www.gnu.org/software/libc/
+  licenses:
+    - GPL-2.0-or-later
+    - LGPL-2.1-or-later
+requirements:
+  build:
+    - package: linux-api-headers
+  run:
+    - package: libgcc
+sources:
+  - url: https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz
+    name: glibc-2.44.tar.xz
+    sha256: 37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    headers="$PKG_BUILD_INPUT_ROOT/linux-api-headers/usr/include"
+    test -d "$headers/linux"
+    test -d "$headers/asm"
+
+    tar -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
+    mkdir glibc-build
+    cd glibc-build
+
+    libc_cv_slibdir=/usr/lib \
+    libc_cv_rtlddir=/lib64 \
+    ../glibc-2.44/configure \
+      --prefix=/usr \
+      --sysconfdir=/etc \
+      --localstatedir=/var \
+      --libdir=/usr/lib \
+      --libexecdir=/usr/lib \
+      --with-headers="$headers" \
+      --disable-profile \
+      --disable-werror \
+      --disable-build-nscd \
+      --disable-timezone-tools \
+      --enable-bind-now \
+      --enable-multi-arch \
+      --enable-stack-protector=strong \
+      --without-gd \
+      MAKEINFO=missing
+
+    make -j "$PKG_JOBS"
+    make install_root="$PKG_DESTDIR" install
+
+    # The x86_64 ABI names /lib64/ld-linux-x86-64.so.2 as the interpreter.
+    # The filesystem package owns /lib64 -> usr/lib64 -> lib, so retain that
+    # ABI path while storing the loader bytes in the canonical /usr tree.
+    if [ -d "$PKG_DESTDIR/lib64" ]; then
+      mkdir -p "$PKG_DESTDIR/usr/lib"
+      for path in "$PKG_DESTDIR"/lib64/*; do
+        [ -e "$path" ] || [ -L "$path" ] || continue
+        mv "$path" "$PKG_DESTDIR/usr/lib/"
+      done
+      rmdir "$PKG_DESTDIR/lib64"
+    fi
+    test -e "$PKG_DESTDIR/usr/lib/ld-linux-x86-64.so.2"
+
+    # libc owns runtime/library ABI, headers and static data. Machine policy,
+    # service state, timezone policy and interpreter-dependent helper scripts
+    # are separate authorities.
+    rm -rf "$PKG_DESTDIR/etc" "$PKG_DESTDIR/var" "$PKG_DESTDIR/usr/share/info"
+    rm -f \
+      "$PKG_DESTDIR/usr/bin/ldd" \
+      "$PKG_DESTDIR/usr/bin/mtrace" \
+      "$PKG_DESTDIR/usr/bin/sotruss" \
+      "$PKG_DESTDIR/usr/bin/xtrace"
+architectures:
+  build: [x86_64]
+  target: [x86_64]

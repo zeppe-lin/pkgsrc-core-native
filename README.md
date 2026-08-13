@@ -52,6 +52,13 @@ to consume whatever kernel headers happen to exist in the provisioned build
 root. The package is still seed-built; it does not claim a self-hosted compiler
 or construction toolchain.
 
+`glibc` is the next bootstrap foundation. It consumes `linux-api-headers` as an
+exact native build input instead of rebuilding or observing kernel headers from
+the seed root. This first libc package intentionally excludes machine `/etc`
+policy, timezone selection, pre-generated locale policy and nscd service state.
+Its pthread runtime requirement on native `libgcc` is declared immediately; target
+resolution remains deliberately incomplete until that package authority exists.
+
 ## License
 
 Collection metadata and Zeppe-Lin-authored recipe files are licensed under
