@@ -44,6 +44,14 @@ target runtime closure and are not generic sequencing hints.
 See `DESIGN.md` for the dependency planes, bootstrap seam, and self-hosting
 direction.
 
+## Bootstrap foundation
+
+`linux-api-headers` is the first package-owned bootstrap foundation. It exports
+the Linux userspace API header tree instead of allowing future libc construction
+to consume whatever kernel headers happen to exist in the provisioned build
+root. The package is still seed-built; it does not claim a self-hosted compiler
+or construction toolchain.
+
 ## License
 
 Collection metadata and Zeppe-Lin-authored recipe files are licensed under

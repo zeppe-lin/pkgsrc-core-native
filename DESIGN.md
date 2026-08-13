@@ -80,6 +80,32 @@ This is a visible bootstrap seam, not ambient permission. Root-view composition,
 interpreter selection, credentials, isolation, and execution evidence belong to
 the native execution/orchestration stack.
 
+## Bootstrap foundation
+
+The first package-owned bootstrap input is `linux-api-headers`. It publishes the
+sanitized Linux userspace API header tree for the selected target architecture.
+The package does not claim that the construction toolchain is already
+self-hosted: its source extraction, Kbuild invocation, header sanitization host
+tool, and output-tree copy still execute through the explicitly provisioned
+construction root.
+
+`linux-api-headers` is nevertheless semantic package authority rather than a
+copy of the seed root's `/usr/include/linux`. A future libc recipe must consume
+it as an explicit build input through:
+
+```text
+$PKG_BUILD_INPUT_ROOT/linux-api-headers/usr/include
+```
+
+That establishes the kernel-userspace ABI input independently from whichever
+headers happen to be installed in the bootstrap root. It is a build input to
+libc, not a fabricated runtime requirement. Whether the package is selected
+into a finished base system belongs to rootfs profile policy.
+
+The current recipe is intentionally x86_64-only. Adding another target
+architecture requires an explicit recipe/protocol review of the corresponding
+Kbuild `ARCH` mapping rather than inferring it from the host.
+
 ## Self-hosting direction
 
 Self-hosting should shrink the provisioned construction root only after native

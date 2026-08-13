@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: linux-api-headers
+  version: 7.1.8
+  release: 1
+  summary: Linux kernel userspace API headers
+  homepage: https://www.kernel.org/
+  licenses:
+    - GPL-2.0 WITH Linux-syscall-note
+requirements: {}
+sources:
+  - url: https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.8.tar.xz
+    name: linux-7.1.8.tar.xz
+    sha256: ff01dcb449279d5b4cfccdb01fee639cf5ff1803f1749a77844dd33915422c49
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    tar -xf "$PKG_SOURCE_ROOT/linux-7.1.8.tar.xz"
+    cd linux-7.1.8
+
+    make -j "$PKG_JOBS" ARCH=x86_64 headers
+
+    mkdir -p "$PKG_DESTDIR/usr/include"
+    (
+      cd usr/include
+      find . \( -type f -o -type l \) -name '*.h' -print |
+        tar -cf - -T -
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+architectures:
+  build: [x86_64]
+  target: [x86_64]
