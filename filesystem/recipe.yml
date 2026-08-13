@@ -5,8 +5,8 @@ format: zeppe-lin.recipe/1
 package:
   name: filesystem
   version: 0.7
-  release: 2
-  summary: Zeppe-Lin root filesystem hierarchy and base configuration
+  release: 3
+  summary: Zeppe-Lin merged-/usr filesystem hierarchy and base configuration
   homepage: https://zeppe-lin.org/
   licenses:
     - GPL-3.0-or-later
@@ -45,8 +45,8 @@ build:
     set -eu
 
     for path in \
-      bin sbin boot dev dev/pts proc sys etc mnt run lib lib32 lib/modules \
-      opt usr usr/bin usr/include usr/lib usr/lib32 usr/sbin usr/share \
+      boot dev dev/pts proc sys etc mnt run \
+      opt usr usr/bin usr/include usr/lib usr/lib/modules usr/lib32 usr/sbin usr/share \
       usr/share/man usr/share/man/man1 usr/share/man/man2 usr/share/man/man3 \
       usr/share/man/man4 usr/share/man/man5 usr/share/man/man6 \
       usr/share/man/man7 usr/share/man/man8 usr/src var var/cache var/lib \
@@ -54,7 +54,11 @@ build:
       mkdir -p "$PKG_DESTDIR/$path"
     done
 
-    ln -s lib "$PKG_DESTDIR/lib64"
+    ln -s usr/bin "$PKG_DESTDIR/bin"
+    ln -s usr/sbin "$PKG_DESTDIR/sbin"
+    ln -s usr/lib "$PKG_DESTDIR/lib"
+    ln -s usr/lib32 "$PKG_DESTDIR/lib32"
+    ln -s usr/lib64 "$PKG_DESTDIR/lib64"
     ln -s lib "$PKG_DESTDIR/usr/lib64"
     ln -s ../var "$PKG_DESTDIR/usr/var"
     ln -s ../run "$PKG_DESTDIR/var/run"
