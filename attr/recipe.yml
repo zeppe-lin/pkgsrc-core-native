@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: attr
+  version: 2.6.0
+  release: 1
+  summary: Extended attribute support library and utilities
+  homepage: https://savannah.nongnu.org/projects/attr/
+  licenses:
+    - GPL-2.0-or-later
+    - LGPL-2.1-or-later
+requirements: {}
+sources:
+  - url: https://download.savannah.gnu.org/releases/attr/attr-2.6.0.tar.gz
+    name: attr-2.6.0.tar.gz
+    sha256: d42fa374513180bb48cb11a46696f488240e5124ff1e6ad88b0abff706985612
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    tar -xf "$PKG_SOURCE_ROOT/attr-2.6.0.tar.gz"
+    mkdir build
+    cd build
+
+    ../attr-2.6.0/configure \
+      --prefix=/usr \
+      --bindir=/bin \
+      --sysconfdir=/etc \
+      --disable-nls
+
+    make V=1
+    make DESTDIR="$PKG_DESTDIR" install
+
+    mkdir -p "$PKG_DESTDIR/lib"
+    mv "$PKG_DESTDIR"/usr/lib/libattr.so.* "$PKG_DESTDIR/lib/"
+    target=$(readlink "$PKG_DESTDIR/usr/lib/libattr.so")
+    ln -sf "../../lib/$target" "$PKG_DESTDIR/usr/lib/libattr.so"
+
+    rm -rf "$PKG_DESTDIR/usr/share/doc"
