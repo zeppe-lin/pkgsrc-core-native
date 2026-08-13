@@ -25,8 +25,8 @@ build:
 
     attr="$PKG_BUILD_INPUT_ROOT/attr"
     export CPPFLAGS="-I$attr/usr/include"
-    export LDFLAGS="-L$attr/usr/lib -Wl,-rpath-link,$attr/lib"
-    export LD_LIBRARY_PATH="$attr/lib"
+    export LDFLAGS="-L$attr/usr/lib -Wl,-rpath-link,$attr/usr/lib"
+    export LD_LIBRARY_PATH="$attr/usr/lib"
     export PKG_CONFIG_PATH="$attr/usr/lib/pkgconfig"
 
     tar -xf "$PKG_SOURCE_ROOT/acl-2.4.0.tar.gz"
@@ -35,15 +35,10 @@ build:
 
     ../acl-2.4.0/configure \
       --prefix=/usr \
-      --bindir=/bin \
+      --bindir=/usr/bin \
       --disable-nls
 
     make V=1
     make DESTDIR="$PKG_DESTDIR" install
-
-    mkdir -p "$PKG_DESTDIR/lib"
-    mv "$PKG_DESTDIR"/usr/lib/libacl.so.* "$PKG_DESTDIR/lib/"
-    target=$(readlink "$PKG_DESTDIR/usr/lib/libacl.so")
-    ln -sf "../../lib/$target" "$PKG_DESTDIR/usr/lib/libacl.so"
 
     rm -rf "$PKG_DESTDIR/usr/share/doc"

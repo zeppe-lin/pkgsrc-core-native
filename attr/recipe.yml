@@ -27,16 +27,11 @@ build:
 
     ../attr-2.6.0/configure \
       --prefix=/usr \
-      --bindir=/bin \
+      --bindir=/usr/bin \
       --sysconfdir=/etc \
       --disable-nls
 
     make V=1
     make DESTDIR="$PKG_DESTDIR" install
-
-    mkdir -p "$PKG_DESTDIR/lib"
-    mv "$PKG_DESTDIR"/usr/lib/libattr.so.* "$PKG_DESTDIR/lib/"
-    target=$(readlink "$PKG_DESTDIR/usr/lib/libattr.so")
-    ln -sf "../../lib/$target" "$PKG_DESTDIR/usr/lib/libattr.so"
 
     rm -rf "$PKG_DESTDIR/usr/share/doc"
