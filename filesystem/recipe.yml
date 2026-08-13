@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: filesystem
+  version: 0.7
+  release: 2
+  summary: Zeppe-Lin root filesystem hierarchy and base configuration
+  homepage: https://zeppe-lin.org/
+  licenses:
+    - GPL-3.0-or-later
+requirements: {}
+sources:
+  - path: fstab
+    name: fstab
+    sha256: 6488693c253d87d8455b199929deb7cc3a29f8b8312cd11a2470bd0fa1770aba
+  - path: group
+    name: group
+    sha256: 9ae77e45e8f64f5c356cda6629d1a4be09a5db5d42f50cc11e587a7ac2df613e
+  - path: issue
+    name: issue
+    sha256: 0b1e11278bbb86e387576cc9c602f0458ad275100488cc83450ba815532c50e7
+  - path: mime.types
+    name: mime.types
+    sha256: d42296ed19d9f45ac06ec9b6c8e0071fd7fc118279f696e423f62ce81e612aba
+  - path: motd
+    name: motd
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - path: passwd
+    name: passwd
+    sha256: 0c1352f12669270fd7987be8cf06f21917c8063773d9e7a00ee7c9f030a4f93a
+  - path: securetty
+    name: securetty
+    sha256: fd8bf2d18312462369dd997bb96c815af73ba8a0c97922d18e54a2664d481d20
+  - path: shadow
+    name: shadow
+    sha256: 6c497de1ad43bb6ca95f98ca27dfa652b2072902c862fb5d393356997f921b56
+  - path: shells
+    name: shells
+    sha256: 250fbd1f01a4ad4e30d2f71556c8b3cd2f96e9b0521e0ca2a37625e7f01a2fc4
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    for path in \
+      bin sbin boot dev dev/pts proc sys etc mnt run lib lib32 lib/modules \
+      opt usr usr/bin usr/include usr/lib usr/lib32 usr/sbin usr/share \
+      usr/share/man usr/share/man/man1 usr/share/man/man2 usr/share/man/man3 \
+      usr/share/man/man4 usr/share/man/man5 usr/share/man/man6 \
+      usr/share/man/man7 usr/share/man/man8 usr/src var var/cache var/lib \
+      var/log var/log/old var/spool var/ftp var/www var/empty home; do
+      mkdir -p "$PKG_DESTDIR/$path"
+    done
+
+    ln -s lib "$PKG_DESTDIR/lib64"
+    ln -s lib "$PKG_DESTDIR/usr/lib64"
+    ln -s ../var "$PKG_DESTDIR/usr/var"
+    ln -s ../run "$PKG_DESTDIR/var/run"
+    ln -s spool/mail "$PKG_DESTDIR/var/mail"
+
+    mkdir -m 1777 "$PKG_DESTDIR/tmp"
+    mkdir -m 0750 "$PKG_DESTDIR/root"
+    mkdir -m 1777 "$PKG_DESTDIR/var/lock"
+    mkdir -m 1777 "$PKG_DESTDIR/var/spool/mail"
+    mkdir -m 1777 "$PKG_DESTDIR/var/tmp"
+    mkdir -m 1777 "$PKG_DESTDIR/dev/shm"
+
+    mknod "$PKG_DESTDIR/dev/console" c 5 1
+    chmod 0600 "$PKG_DESTDIR/dev/console"
+
+    install -m 0644 "$PKG_SOURCE_ROOT/issue" "$PKG_DESTDIR/etc/issue"
+    install -m 0644 "$PKG_SOURCE_ROOT/motd" "$PKG_DESTDIR/etc/motd"
+    install -m 0644 "$PKG_SOURCE_ROOT/shells" "$PKG_DESTDIR/etc/shells"
+    install -m 0644 "$PKG_SOURCE_ROOT/group" "$PKG_DESTDIR/etc/group"
+    install -m 0644 "$PKG_SOURCE_ROOT/passwd" "$PKG_DESTDIR/etc/passwd"
+    install -m 0640 "$PKG_SOURCE_ROOT/shadow" "$PKG_DESTDIR/etc/shadow"
+    install -m 0644 "$PKG_SOURCE_ROOT/securetty" "$PKG_DESTDIR/etc/securetty"
+    install -m 0644 "$PKG_SOURCE_ROOT/fstab" "$PKG_DESTDIR/etc/fstab"
+    install -m 0644 "$PKG_SOURCE_ROOT/mime.types" "$PKG_DESTDIR/etc/mime.types"
+    ln -s ../proc/self/mounts "$PKG_DESTDIR/etc/mtab"
