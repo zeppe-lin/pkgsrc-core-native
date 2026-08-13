@@ -39,3 +39,16 @@ Collection metadata and Zeppe-Lin-authored recipe files are licensed under
 GPL-3.0-or-later. `package.licenses` records the license of the software
 specified by a recipe. Package-local material derived from third-party sources
 retains its own copyright and license terms.
+
+### Filesystem package boundary
+
+The `filesystem` package owns only the persistent namespace skeleton required to
+admit package payloads: fundamental directories, merged-`/usr` aliases, and
+stable compatibility topology such as `/var/run -> /run` and
+`/etc/mtab -> /proc/self/mounts`.
+
+It does not own host configuration, mutable account databases, login policy,
+service-specific state directories, runtime device nodes, or rootfs composition
+policy. Those authorities must be supplied by the component that actually owns
+them. In particular, `filesystem` carries no `fstab`, `passwd`, `group`,
+`shadow`, `securetty`, `issue`, `motd`, `shells`, or MIME database bytes.
