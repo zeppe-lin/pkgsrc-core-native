@@ -30,9 +30,11 @@ build:
 
     tar -xf "$PKG_SOURCE_ROOT/zstd-1.5.7.tar.gz"
 
-    inputs=$PKG_BUILD_INPUT_ROOT
-    prefixes="$inputs/lz4/usr;$inputs/xz/usr;$inputs/zlib/usr"
-    export PKG_CONFIG_PATH="$inputs/lz4/usr/lib/pkgconfig:$inputs/xz/usr/lib/pkgconfig:$inputs/zlib/usr/lib/pkgconfig"
+    lz4="$PKG_BUILD_INPUT_ROOT/lz4"
+    xz="$PKG_BUILD_INPUT_ROOT/xz"
+    zlib="$PKG_BUILD_INPUT_ROOT/zlib"
+    prefixes="$lz4/usr;$xz/usr;$zlib/usr"
+    export PKG_CONFIG_PATH="$lz4/usr/lib/pkgconfig:$xz/usr/lib/pkgconfig:$zlib/usr/lib/pkgconfig"
     export CFLAGS="${CFLAGS:-} -ffat-lto-objects"
     export CXXFLAGS="${CXXFLAGS:-} -ffat-lto-objects"
 

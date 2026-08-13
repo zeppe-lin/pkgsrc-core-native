@@ -33,6 +33,17 @@ Zeppe-Lin 2.x uses a merged `/usr` hierarchy. Package payloads use the canonical
 top-level `/bin`, `/sbin`, `/lib`, and related aliases; other package images do
 not recreate split-hierarchy payload paths.
 
+## Dependency authority
+
+Recipe requirements name package authority, not ambient construction commands.
+Direct build/check package inputs are consumed explicitly through
+`PKG_BUILD_INPUT_ROOT`; ordinary bootstrap tools invoked as bare commands come
+from the caller-supplied construction root view. Run requirements describe
+target runtime closure and are not generic sequencing hints.
+
+See `DESIGN.md` for the dependency planes, bootstrap seam, and self-hosting
+direction.
+
 ## License
 
 Collection metadata and Zeppe-Lin-authored recipe files are licensed under
