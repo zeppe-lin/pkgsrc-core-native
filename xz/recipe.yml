@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: xz
+  version: 5.8.3
+  release: 1
+  summary: Compression utility using the LZMA algorithm
+  homepage: https://tukaani.org/xz/
+  licenses:
+    - 0BSD
+    - GPL-2.0-or-later
+    - LGPL-2.1-or-later
+requirements: {}
+sources:
+  - url: https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.xz
+    name: xz-5.8.3.tar.xz
+    sha256: fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    tar -xf "$PKG_SOURCE_ROOT/xz-5.8.3.tar.xz"
+    mkdir build
+    cd build
+
+    ../xz-5.8.3/configure \
+      --prefix=/usr \
+      --disable-doc \
+      --disable-nls
+
+    make -j "$PKG_JOBS" V=1
+    make DESTDIR="$PKG_DESTDIR" install

@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: zstd
+  version: 1.5.7
+  release: 1
+  summary: Real-time compression algorithm with high compression ratios
+  homepage: https://facebook.github.io/zstd/
+  licenses:
+    - BSD-3-Clause
+requirements:
+  build:
+    - package: lz4
+    - package: xz
+    - package: zlib
+  run:
+    - package: lz4
+    - package: xz
+    - package: zlib
+sources:
+  - url: https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz
+    name: zstd-1.5.7.tar.gz
+    sha256: eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    tar -xf "$PKG_SOURCE_ROOT/zstd-1.5.7.tar.gz"
+
+    inputs=$PKG_BUILD_INPUT_ROOT
+    prefixes="$inputs/lz4/usr;$inputs/xz/usr;$inputs/zlib/usr"
+    export PKG_CONFIG_PATH="$inputs/lz4/usr/lib/pkgconfig:$inputs/xz/usr/lib/pkgconfig:$inputs/zlib/usr/lib/pkgconfig"
+    export CFLAGS="${CFLAGS:-} -ffat-lto-objects"
+    export CXXFLAGS="${CXXFLAGS:-} -ffat-lto-objects"
+
+    cmake -S zstd-1.5.7/build/cmake -B build -G Ninja \
+      -D CMAKE_BUILD_TYPE=Release \
+      -D CMAKE_INSTALL_PREFIX=/usr \
+      -D CMAKE_INSTALL_LIBDIR=/usr/lib \
+      -D CMAKE_PREFIX_PATH="$prefixes" \
+      -D CMAKE_C_FLAGS_RELEASE="$CFLAGS" \
+      -D CMAKE_CXX_FLAGS_RELEASE="$CXXFLAGS" \
+      -D ZSTD_ZLIB_SUPPORT=ON \
+      -D ZSTD_LZMA_SUPPORT=ON \
+      -D ZSTD_LZ4_SUPPORT=ON \
+      -D ZSTD_MULTITHREAD_SUPPORT=ON \
+      -D ZSTD_BUILD_STATIC=ON \
+      -D ZSTD_BUILD_CONTRIB=OFF \
+      -D ZSTD_BUILD_TESTS=OFF \
+      -D ZSTD_PROGRAMS_LINK_SHARED=ON
+
+    ninja -C build -j "$PKG_JOBS" -v
+    DESTDIR="$PKG_DESTDIR" ninja -C build install
+
+    if [ ! -f "$PKG_DESTDIR/usr/share/man/man1/zstdmt.1" ]; then
+      printf '.so man1/zstd.1\n' > "$PKG_DESTDIR/usr/share/man/man1/zstdmt.1"
+    fi
