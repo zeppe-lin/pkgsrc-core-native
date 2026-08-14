@@ -171,9 +171,14 @@ calling user and let the harness elevate only the `pkgctl` process:
 make bootstrap BOOTSTRAP_PRIVILEGE=sudo
 ```
 
-This preserves the calling user's numeric build credentials while granting the
-controller the mount/namespace authority it needs. The command is bounded;
-when the report says `complete no`, continue the same retained command with:
+Construction/check credentials are not caller-selected. `bootstrap-init`
+observes the exact UID, primary GID, and supplementary groups produced by the
+chosen native-supervisor invocation and binds them into the workspace. Every
+start/resume re-observes that tuple and refuses drift. With ordinary `sudo`,
+this normally means root supervisor credentials. This matches `pkgctl`'s native
+execution preflight instead of asking a privileged supervisor to impersonate the
+calling user. The command is bounded; when the report says `complete no`,
+continue the same retained command with:
 
 ```sh
 make bootstrap-resume BOOTSTRAP_PRIVILEGE=sudo

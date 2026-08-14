@@ -25,9 +25,6 @@ pkgstate_init_requested=${PKGSTATE_INIT:-pkgstate-init}
 privilege_requested=${BOOTSTRAP_PRIVILEGE:-}
 max_steps=${BOOTSTRAP_MAX_STEPS:-8}
 source_date_epoch=${BOOTSTRAP_SOURCE_DATE_EPOCH:-0}
-build_uid=${BOOTSTRAP_BUILD_UID:-$(id -u)}
-build_gid=${BOOTSTRAP_BUILD_GID:-$(id -g)}
-build_groups=${BOOTSTRAP_BUILD_GROUPS:-$(id -G)}
 
 fail()
 {
@@ -232,11 +229,6 @@ preflight_seed_root()
   require_uint "$max_steps" BOOTSTRAP_MAX_STEPS
   [ "$max_steps" -gt 0 ] || fail 'BOOTSTRAP_MAX_STEPS must be positive'
   require_uint "$source_date_epoch" BOOTSTRAP_SOURCE_DATE_EPOCH
-  require_uint "$build_uid" BOOTSTRAP_BUILD_UID
-  require_uint "$build_gid" BOOTSTRAP_BUILD_GID
-  for group in $build_groups; do
-    require_uint "$group" BOOTSTRAP_BUILD_GROUPS
-  done
 }
 
 marker=$work/.pkgsrc-core-native-bootstrap-v1
@@ -303,8 +295,14 @@ load_marker_authority()
   recorded_interpreter=$(sed -n 's/^interpreter=//p' "$marker")
   recorded_collection_commit=$(sed -n 's/^collection-commit=//p' "$marker")
   recorded_toolchain_prefix=$(sed -n 's/^toolchain-prefix=//p' "$marker")
+  recorded_supervisor_uid=$(sed -n 's/^supervisor-user-id=//p' "$marker")
+  recorded_supervisor_gid=$(sed -n 's/^supervisor-group-id=//p' "$marker")
+  recorded_supervisor_groups=$(sed -n 's/^supervisor-groups=//p' "$marker")
   [ -n "$recorded_toolchain_prefix" ] || \
     fail 'bootstrap workspace lacks private toolchain authority; clean and reinitialize'
+  [ -n "$recorded_supervisor_uid" ] && [ -n "$recorded_supervisor_gid" ] && \
+    [ -n "$recorded_supervisor_groups" ] || \
+    fail 'bootstrap workspace lacks native supervisor credential authority; clean and reinitialize'
   if [ -n "$toolchain_prefix" ]; then
     [ "$recorded_toolchain_prefix" = "$toolchain_prefix" ] || \
       fail 'BOOTSTRAP_TOOLCHAIN_PREFIX differs from initialized workspace authority'
@@ -352,12 +350,47 @@ pkgctl_bin=
 pkgstate_init_bin=
 privilege_bin=
 env_bin=
+id_bin=
+supervisor_uid=
+supervisor_gid=
+supervisor_groups=
 
 resolve_privilege()
 {
   if [ -n "$privilege_requested" ] && [ -z "$privilege_bin" ]; then
     privilege_bin=$(require_command "$privilege_requested")
   fi
+}
+
+resolve_supervisor_credentials()
+{
+  resolve_privilege
+  id_bin=$(require_command id)
+  if [ -n "$privilege_bin" ]; then
+    supervisor_uid=$("$privilege_bin" "$id_bin" -u)
+    supervisor_gid=$("$privilege_bin" "$id_bin" -g)
+    supervisor_groups=$("$privilege_bin" "$id_bin" -G)
+  else
+    supervisor_uid=$("$id_bin" -u)
+    supervisor_gid=$("$id_bin" -g)
+    supervisor_groups=$("$id_bin" -G)
+  fi
+  require_uint "$supervisor_uid" supervisor-user-id
+  require_uint "$supervisor_gid" supervisor-group-id
+  for group in $supervisor_groups; do
+    require_uint "$group" supervisor-supplementary-groups
+  done
+}
+
+require_recorded_supervisor()
+{
+  resolve_supervisor_credentials
+  [ "$recorded_supervisor_uid" = "$supervisor_uid" ] || \
+    fail 'native supervisor user id differs from initialized bootstrap authority'
+  [ "$recorded_supervisor_gid" = "$supervisor_gid" ] || \
+    fail 'native supervisor group id differs from initialized bootstrap authority'
+  [ "$recorded_supervisor_groups" = "$supervisor_groups" ] || \
+    fail 'native supervisor supplementary groups differ from initialized bootstrap authority'
 }
 
 resolve_private_tool()
@@ -443,8 +476,8 @@ append_groups_and_run()
   error=$2
   shift 2
   set -- "$@"
-  for group in $build_groups; do
-    [ "$group" = "$build_gid" ] || \
+  for group in $supervisor_groups; do
+    [ "$group" = "$supervisor_gid" ] || \
       set -- "$@" --build-supplementary-group "$group"
   done
 
@@ -465,6 +498,7 @@ start_campaign()
 {
   resolve_controller_tools
   load_marker_authority
+  require_recorded_supervisor
   require_seed
   require_build_root
   require_clean_collection
@@ -488,8 +522,8 @@ start_campaign()
     --build-root "$build_root" \
     --artifact-root "$artifacts" \
     --interpreter "$interpreter" \
-    --build-user-id "$build_uid" \
-    --build-group-id "$build_gid" \
+    --build-user-id "$supervisor_uid" \
+    --build-group-id "$supervisor_gid" \
     --source-date-epoch "$source_date_epoch" \
     --max-steps "$max_steps"
   # shellcheck disable=SC2046
@@ -501,6 +535,7 @@ resume_campaign()
 {
   resolve_controller_tools
   load_marker_authority
+  require_recorded_supervisor
   require_seed
   require_build_root
 
@@ -515,8 +550,8 @@ resume_campaign()
     --build-root "$build_root" \
     --artifact-root "$artifacts" \
     --interpreter "$interpreter" \
-    --build-user-id "$build_uid" \
-    --build-group-id "$build_gid" \
+    --build-user-id "$supervisor_uid" \
+    --build-group-id "$supervisor_gid" \
     --source-date-epoch "$source_date_epoch" \
     --max-steps "$max_steps"
   append_groups_and_run "$report" "$error" "$@"
@@ -650,6 +685,7 @@ init_campaign()
   require_clean_collection
   admitted_collection_commit=$(collection_commit)
   resolve_controller_tools
+  resolve_supervisor_credentials
   preflight_seed_root
   interpreter=$(resolve_interpreter)
 
@@ -673,6 +709,9 @@ interpreter=$interpreter
 collection=$repo
 collection-commit=$admitted_collection_commit
 toolchain-prefix=$toolchain_prefix
+supervisor-user-id=$supervisor_uid
+supervisor-group-id=$supervisor_gid
+supervisor-groups=$supervisor_groups
 nonce=$(command_nonce)
 MARKER
 
@@ -684,6 +723,9 @@ MARKER
     "collection-commit=$admitted_collection_commit" \
     "collection-projection=$collection_projection" \
     "toolchain-prefix=$toolchain_prefix" \
+    "supervisor-user-id=$supervisor_uid" \
+    "supervisor-group-id=$supervisor_gid" \
+    "supervisor-groups=$supervisor_groups" \
     "nonce=$(command_nonce)" \
     'goal=build=libgcc'
 }

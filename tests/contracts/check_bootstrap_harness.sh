@@ -34,6 +34,15 @@ grep -F 'pkgstate_init_bin' "$harness" >/dev/null || \
   fail 'bootstrap does not use provider-owned empty-state initialization'
 grep -F 'BOOTSTRAP_TOOLCHAIN_PREFIX' "$makefile" >/dev/null || \
   fail 'Makefile does not expose private toolchain authority'
+if grep -E 'BOOTSTRAP_BUILD_(UID|GID|GROUPS)' "$makefile" >/dev/null; then
+  fail 'Makefile exposes caller-selected native supervisor credentials'
+fi
+grep -F 'resolve_supervisor_credentials' "$harness" >/dev/null || \
+  fail 'bootstrap does not derive native supervisor credentials'
+grep -F 'supervisor-user-id=$supervisor_uid' "$harness" >/dev/null || \
+  fail 'bootstrap workspace does not bind native supervisor credentials'
+grep -F 'require_recorded_supervisor' "$harness" >/dev/null || \
+  fail 'bootstrap start/resume do not reject supervisor credential drift'
 grep -F 'toolchain_prefix/bin/$requested' "$harness" >/dev/null || \
   fail 'controller tools are not resolved inside the private toolchain prefix'
 grep -F '"LD_LIBRARY_PATH=$toolchain_ld_library_path"' "$harness" >/dev/null || \

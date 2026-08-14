@@ -272,6 +272,17 @@ private dynamic-library path is therefore established after privilege entry
 rather than relying on `sudo` to preserve loader-sensitive environment names.
 The harness never falls back to a same-named system `pkgctl`.
 
+### Native supervisor credentials
+
+Construction and check credentials are controller authority, not a bootstrap
+configuration knob. The native executor requires those credentials to equal the
+credentials of the supervising `pkgctl` process before transaction execution.
+`bootstrap-init` therefore observes UID, primary GID, and supplementary groups
+through the same optional `BOOTSTRAP_PRIVILEGE` boundary used to launch `pkgctl`
+and retains that exact tuple in the workspace marker. Start and resume
+re-observe the tuple and fail closed on drift. The Makefile exposes no arbitrary
+`BOOTSTRAP_BUILD_UID`, `BOOTSTRAP_BUILD_GID`, or supplementary-group override.
+
 ### Start and resume
 
 `bootstrap-init` creates one empty provider-owned canonical state store using
