@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: glibc-bootstrap
+  version: 2.44
+  release: 1
+  summary: GNU C Library bootstrap sysroot
+  homepage: https://www.gnu.org/software/libc/
+  licenses:
+    - GPL-2.0 WITH Linux-syscall-note
+    - GPL-2.0-or-later
+    - LGPL-2.1-or-later
+requirements:
+  build:
+    - package: linux-api-headers
+sources:
+  - url: https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz
+    name: glibc-2.44.tar.xz
+    sha256: 37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    linux_headers="$PKG_BUILD_INPUT_ROOT/linux-api-headers/usr/include"
+    test -d "$linux_headers/linux"
+    test -d "$linux_headers/asm"
+
+    # Publish one exact bootstrap sysroot. The Linux UAPI tree remains
+    # package-input authority; it is copied here only so the later GCC/libgcc
+    # build receives one coherent --with-sysroot tree.
+    mkdir -p "$PKG_DESTDIR/usr/include"
+    (
+      cd "$linux_headers"
+      tar -cf - .
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+
+    tar -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
+    mkdir glibc-bootstrap-build
+    cd glibc-bootstrap-build
+
+    ../glibc-2.44/configure \
+      --prefix=/usr \
+      --libdir=/usr/lib \
+      --libexecdir=/usr/lib \
+      --with-headers="$linux_headers" \
+      --disable-profile \
+      --disable-werror \
+      MAKEINFO=missing
+
+    # Upstream install-headers publishes the public header set without
+    # completing libc. gnu/stubs.h is intentionally excluded upstream because
+    # its real contents depend on the completed subdirectory build, so install
+    # the headers first and make that one bootstrap placeholder explicit.
+    make -j "$PKG_JOBS" \
+      install_root="$PKG_DESTDIR" \
+      install-headers
+    mkdir -p "$PKG_DESTDIR/usr/include/gnu"
+    : > bootstrap-stubs.h
+    install -m 0644 bootstrap-stubs.h "$PKG_DESTDIR/usr/include/gnu/stubs.h"
+
+    # GCC target-runtime construction also needs the target startup objects.
+    make -j "$PKG_JOBS" csu/subdir_lib
+    mkdir -p "$PKG_DESTDIR/usr/lib"
+    install -m 0644 \
+      csu/crt1.o \
+      csu/crti.o \
+      csu/crtn.o \
+      "$PKG_DESTDIR/usr/lib/"
+
+    # This object is bootstrap link surface only. It is deliberately empty and
+    # built without startup files or standard libraries; final libc authority
+    # remains the separate glibc package.
+    printf '%s\n' '/* glibc bootstrap link surface */' > bootstrap-libc.c
+    cc -nostdlib -nostartfiles -shared -x c \
+      bootstrap-libc.c \
+      -o "$PKG_DESTDIR/usr/lib/libc.so"
+
+    test -f "$PKG_DESTDIR/usr/include/gnu/stubs.h"
+    test -f "$PKG_DESTDIR/usr/include/linux/types.h"
+    test -f "$PKG_DESTDIR/usr/lib/crt1.o"
+    test -f "$PKG_DESTDIR/usr/lib/crti.o"
+    test -f "$PKG_DESTDIR/usr/lib/crtn.o"
+    test -f "$PKG_DESTDIR/usr/lib/libc.so"
+architectures:
+  build: [x86_64]
+  target: [x86_64]

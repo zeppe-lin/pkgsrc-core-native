@@ -59,6 +59,13 @@ policy, timezone selection, pre-generated locale policy and nscd service state.
 Its pthread runtime requirement on native `libgcc` is declared immediately; target
 resolution remains deliberately incomplete until that package authority exists.
 
+`glibc-bootstrap` is the bounded construction sysroot used to break the bootstrap
+cycle before native `libgcc` exists. It combines the exact `linux-api-headers`
+input with glibc bootstrap headers, one explicit empty `gnu/stubs.h` bootstrap
+placeholder, the x86_64 startup objects, and an empty bootstrap-only `libc.so`
+link surface. It is construction authority only, not an alternate libc runtime
+and not rootfs policy.
+
 ## License
 
 Collection metadata and Zeppe-Lin-authored recipe files are licensed under

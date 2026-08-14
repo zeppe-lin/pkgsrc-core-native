@@ -136,6 +136,43 @@ The current recipe is intentionally x86_64-only. Adding another target
 architecture requires an explicit recipe/protocol review of the corresponding
 Kbuild `ARCH` mapping rather than inferring it from the host.
 
+### C library bootstrap sysroot
+
+`glibc-bootstrap` is a construction-only bootstrap sysroot authority. It is not
+an alternate libc runtime package and must not be selected as rootfs policy.
+Its purpose is to break the genuine bootstrap cycle between final glibc runtime
+authority and the shared GCC runtime required by glibc pthread unwinding.
+
+The package has one direct build requirement, `linux-api-headers`, and no run,
+check, or lifecycle package requirements. Its output is deliberately bounded to
+one pre-libgcc sysroot: Linux UAPI headers, glibc bootstrap headers, the startup
+objects `crt1.o`, `crti.o`, and `crtn.o`, and an empty `libc.so` link surface.
+The Linux UAPI bytes are copied from the exact admitted package input so the
+later GCC build can consume one coherent sysroot; that copy does not turn
+`glibc-bootstrap` into kernel-header source authority.
+
+Upstream `install-headers` publishes the public header set without completing
+libc, but the real `gnu/stubs.h` is intentionally generated only after all glibc
+subdirectories have produced their stub witnesses. `glibc-bootstrap` therefore
+creates one explicit empty `gnu/stubs.h` placeholder after `install-headers`.
+That synthetic header is bootstrap link/compile surface only; final `glibc`
+regenerates the authoritative installed stubs from its completed build. The
+repository does not rely on the historical downstream
+`install-bootstrap-headers` make variable.
+
+The bootstrap libc object is produced with `-nostdlib -nostartfiles -shared`
+and contains no final libc implementation. The package does not publish the ELF
+interpreter, NSS/runtime configuration, locales, services, or other final libc
+payload. A full glibc build remains the authority of the separate `glibc`
+package.
+
+A future `libgcc` recipe must consume this package as an exact build input and
+point GCC target-runtime construction at
+`$PKG_BUILD_INPUT_ROOT/glibc-bootstrap` as its sysroot. Final `libgcc` may then
+carry a real run requirement on `glibc`; together with the existing
+`glibc run -> libgcc` edge, the transaction layer can represent the final
+runtime cycle as a runtime cohort without introducing a forbidden build cycle.
+
 ## Self-hosting direction
 
 Self-hosting should shrink the provisioned construction root only after native
