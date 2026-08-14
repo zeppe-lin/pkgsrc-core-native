@@ -60,11 +60,17 @@ Its pthread runtime requirement on native `libgcc` is declared immediately; targ
 resolution remains deliberately incomplete until that package authority exists.
 
 `glibc-bootstrap` is the bounded construction sysroot used to break the bootstrap
-cycle before native `libgcc` exists. It combines the exact `linux-api-headers`
-input with glibc bootstrap headers, one explicit empty `gnu/stubs.h` bootstrap
-placeholder, the x86_64 startup objects, and an empty bootstrap-only `libc.so`
-link surface. It is construction authority only, not an alternate libc runtime
-and not rootfs policy.
+cycle before native `libgcc` exists. It consumes the exact `linux-api-headers`
+input, builds glibc into a private stage, then publishes only the real libc
+compile/link surface needed by GCC target-runtime construction: UAPI and glibc
+headers, startup objects, the libc linker surface, and the x86_64 loader. It is
+construction authority only, not an alternate deployable libc and not rootfs
+policy.
+
+`libgcc` consumes that exact sysroot and publishes only `libgcc_s.so.1`. Its
+runtime requirement on final `glibc` closes the reciprocal dependency already
+declared by glibc. The pair is therefore the first native runtime cohort while
+the construction graph stays acyclic.
 
 ## License
 

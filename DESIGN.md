@@ -144,34 +144,51 @@ Its purpose is to break the genuine bootstrap cycle between final glibc runtime
 authority and the shared GCC runtime required by glibc pthread unwinding.
 
 The package has one direct build requirement, `linux-api-headers`, and no run,
-check, or lifecycle package requirements. Its output is deliberately bounded to
-one pre-libgcc sysroot: Linux UAPI headers, glibc bootstrap headers, the startup
-objects `crt1.o`, `crti.o`, and `crtn.o`, and an empty `libc.so` link surface.
-The Linux UAPI bytes are copied from the exact admitted package input so the
-later GCC build can consume one coherent sysroot; that copy does not turn
-`glibc-bootstrap` into kernel-header source authority.
+check, or lifecycle package requirements. It builds glibc with the provisioned
+seed compiler into a private staging tree, then projects one bounded GCC
+sysroot from that result. The published sysroot contains the admitted Linux
+UAPI headers, real glibc public headers, startup objects, `libc.so` linker
+script, `libc.so.6`, `libc_nonshared.a`, and the real x86_64 dynamic loader.
+The Linux UAPI bytes are copied from the exact admitted package input so later
+GCC target-runtime construction receives one coherent sysroot.
 
-Upstream `install-headers` publishes the public header set without completing
-libc, but the real `gnu/stubs.h` is intentionally generated only after all glibc
-subdirectories have produced their stub witnesses. `glibc-bootstrap` therefore
-creates one explicit empty `gnu/stubs.h` placeholder after `install-headers`.
-That synthetic header is bootstrap link/compile surface only; final `glibc`
-regenerates the authoritative installed stubs from its completed build. The
-repository does not rely on the historical downstream
-`install-bootstrap-headers` make variable.
+This is a real glibc compile/link surface, but it is not target runtime
+authority. The package does not carry `/etc` policy, mutable `/var` state,
+locales, service state, compiler tools, or a runtime dependency closure. It
+does not create synthetic libc or loader ABI bytes. Final `glibc` remains the
+separate deployable C-library authority and declares its own runtime closure.
 
-The bootstrap libc object is produced with `-nostdlib -nostartfiles -shared`
-and contains no final libc implementation. The package does not publish the ELF
-interpreter, NSS/runtime configuration, locales, services, or other final libc
-payload. A full glibc build remains the authority of the separate `glibc`
-package.
+A `libgcc` recipe must consume `glibc-bootstrap` through `--with-sysroot` as its
+single libc/kernel construction view. It must not add final `glibc` as a build
+input, because build inputs contribute their runtime closure and final glibc
+already requires libgcc. Keeping the construction-only sysroot separate lets
+libgcc link against the real target libc ABI without creating a forbidden build
+cycle.
 
-A future `libgcc` recipe must consume this package as an exact build input and
-point GCC target-runtime construction at
-`$PKG_BUILD_INPUT_ROOT/glibc-bootstrap` as its sysroot. Final `libgcc` may then
-carry a real run requirement on `glibc`; together with the existing
-`glibc run -> libgcc` edge, the transaction layer can represent the final
-runtime cycle as a runtime cohort without introducing a forbidden build cycle.
+### GCC low-level runtime
+
+`libgcc` is the first package whose final runtime closure intentionally closes a
+cycle. Its build input is `glibc-bootstrap`; its target runtime requirement is
+final `glibc`. The existing final glibc recipe already records the reciprocal
+runtime requirement. In authority notation:
+
+- `libgcc build -> glibc-bootstrap`;
+- `libgcc run -> glibc`;
+- `glibc run -> libgcc`.
+
+`glibc` and `libgcc` form the first native runtime cohort. The resolver may
+retain the finite runtime cycle and the transaction layer may collapse that
+cycle into one cohort without inventing cyclic execution precedence. The build
+plane remains acyclic because `glibc-bootstrap` has no `run -> libgcc` edge.
+
+The libgcc package is intentionally narrower than GCC. GCC 16.1.0 source is
+used only to build the compiler machinery required for `all-target-libgcc`.
+Only `libgcc_s.so.1` is projected into the package artifact. Compiler drivers,
+GCC-private static runtime objects, libstdc++, sanitizer runtimes, libatomic,
+and other target libraries remain future authorities. The produced shared
+runtime is checked for the final x86_64 ABI names `libc.so.6` and
+`ld-linux-x86-64.so.2` and must not retain an RPATH or RUNPATH into its
+construction environment.
 
 ## Self-hosting direction
 

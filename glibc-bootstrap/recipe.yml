@@ -28,55 +28,67 @@ build:
     test -d "$linux_headers/linux"
     test -d "$linux_headers/asm"
 
-    # Publish one exact bootstrap sysroot. The Linux UAPI tree remains
-    # package-input authority; it is copied here only so the later GCC/libgcc
-    # build receives one coherent --with-sysroot tree.
-    mkdir -p "$PKG_DESTDIR/usr/include"
-    (
-      cd "$linux_headers"
-      tar -cf - .
-    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
-
     tar -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
-    mkdir glibc-bootstrap-build
+    mkdir glibc-bootstrap-build glibc-bootstrap-stage
     cd glibc-bootstrap-build
 
+    stage=$(CDPATH= cd -- ../glibc-bootstrap-stage && pwd)
+
+    libc_cv_slibdir=/usr/lib \
+    libc_cv_rtlddir=/lib64 \
     ../glibc-2.44/configure \
       --prefix=/usr \
+      --sysconfdir=/etc \
+      --localstatedir=/var \
       --libdir=/usr/lib \
       --libexecdir=/usr/lib \
       --with-headers="$linux_headers" \
       --disable-profile \
       --disable-werror \
+      --disable-build-nscd \
+      --disable-timezone-tools \
+      --enable-bind-now \
+      --enable-multi-arch \
+      --enable-stack-protector=strong \
+      --without-gd \
       MAKEINFO=missing
 
-    # Upstream install-headers publishes the public header set without
-    # completing libc. gnu/stubs.h is intentionally excluded upstream because
-    # its real contents depend on the completed subdirectory build, so install
-    # the headers first and make that one bootstrap placeholder explicit.
-    make -j "$PKG_JOBS" \
-      install_root="$PKG_DESTDIR" \
-      install-headers
-    mkdir -p "$PKG_DESTDIR/usr/include/gnu"
-    : > bootstrap-stubs.h
-    install -m 0644 bootstrap-stubs.h "$PKG_DESTDIR/usr/include/gnu/stubs.h"
+    # Build a real libc link surface with the seed compiler. This package is
+    # construction authority only, so it intentionally has no libgcc runtime
+    # requirement and is never target/rootfs policy.
+    make -j "$PKG_JOBS"
+    make install_root="$stage" install
 
-    # GCC target-runtime construction also needs the target startup objects.
-    make -j "$PKG_JOBS" csu/subdir_lib
+    # Publish one coherent GCC sysroot. Linux UAPI remains separate source
+    # authority and is copied from its exact admitted package input.
+    mkdir -p "$PKG_DESTDIR/usr/include"
+    (
+      cd "$linux_headers"
+      tar -cf - .
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+    (
+      cd "$stage/usr/include"
+      tar -cf - .
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+
     mkdir -p "$PKG_DESTDIR/usr/lib"
+    for object in crt1.o crti.o crtn.o; do
+      install -m 0644 "$stage/usr/lib/$object" "$PKG_DESTDIR/usr/lib/$object"
+    done
+    install -m 0644 "$stage/usr/lib/libc.so" "$PKG_DESTDIR/usr/lib/libc.so"
+    install -m 0755 "$stage/usr/lib/libc.so.6" "$PKG_DESTDIR/usr/lib/libc.so.6"
     install -m 0644 \
-      csu/crt1.o \
-      csu/crti.o \
-      csu/crtn.o \
-      "$PKG_DESTDIR/usr/lib/"
+      "$stage/usr/lib/libc_nonshared.a" \
+      "$PKG_DESTDIR/usr/lib/libc_nonshared.a"
 
-    # This object is bootstrap link surface only. It is deliberately empty and
-    # built without startup files or standard libraries; final libc authority
-    # remains the separate glibc package.
-    printf '%s\n' '/* glibc bootstrap link surface */' > bootstrap-libc.c
-    cc -nostdlib -nostartfiles -shared -x c \
-      bootstrap-libc.c \
-      -o "$PKG_DESTDIR/usr/lib/libc.so"
+    # The final x86_64 runtime ABI names /lib64/ld-linux-x86-64.so.2. Mirror
+    # the filesystem package topology inside this construction sysroot while
+    # storing the loader bytes in canonical /usr/lib.
+    loader="$stage/lib64/ld-linux-x86-64.so.2"
+    test -e "$loader"
+    install -m 0755 "$loader" "$PKG_DESTDIR/usr/lib/ld-linux-x86-64.so.2"
+    ln -s lib "$PKG_DESTDIR/usr/lib64"
+    ln -s usr/lib64 "$PKG_DESTDIR/lib64"
 
     test -f "$PKG_DESTDIR/usr/include/gnu/stubs.h"
     test -f "$PKG_DESTDIR/usr/include/linux/types.h"
@@ -84,6 +96,10 @@ build:
     test -f "$PKG_DESTDIR/usr/lib/crti.o"
     test -f "$PKG_DESTDIR/usr/lib/crtn.o"
     test -f "$PKG_DESTDIR/usr/lib/libc.so"
+    test -f "$PKG_DESTDIR/usr/lib/libc.so.6"
+    test -f "$PKG_DESTDIR/usr/lib/libc_nonshared.a"
+    test -f "$PKG_DESTDIR/usr/lib/ld-linux-x86-64.so.2"
+    test -L "$PKG_DESTDIR/lib64"
 architectures:
   build: [x86_64]
   target: [x86_64]

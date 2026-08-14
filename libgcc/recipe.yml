@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: libgcc
+  version: 16.1.0
+  release: 1
+  summary: GCC low-level runtime library
+  homepage: https://gcc.gnu.org/
+  licenses:
+    - GPL-3.0-or-later WITH GCC-exception-3.1
+requirements:
+  build:
+    - package: glibc-bootstrap
+  run:
+    - package: glibc
+sources:
+  - url: https://ftp.gnu.org/gnu/gcc/gcc-16.1.0/gcc-16.1.0.tar.xz
+    name: gcc-16.1.0.tar.xz
+    sha256: 50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79
+build:
+  language: posix-shell
+  script: |
+    set -eu
+    LC_ALL=C
+    export LC_ALL
+
+    sysroot="$PKG_BUILD_INPUT_ROOT/glibc-bootstrap"
+    test -f "$sysroot/usr/include/gnu/stubs.h"
+    test -f "$sysroot/usr/include/linux/types.h"
+    test -f "$sysroot/usr/lib/crt1.o"
+    test -f "$sysroot/usr/lib/libc.so"
+    test -f "$sysroot/usr/lib/libc.so.6"
+    test -f "$sysroot/usr/lib/libc_nonshared.a"
+    test -e "$sysroot/lib64/ld-linux-x86-64.so.2"
+
+    tar -xf "$PKG_SOURCE_ROOT/gcc-16.1.0.tar.xz"
+    mkdir gcc-libgcc-build gcc-libgcc-stage
+    cd gcc-libgcc-build
+
+    stage=$(CDPATH= cd -- ../gcc-libgcc-stage && pwd)
+
+    ../gcc-16.1.0/configure \
+      --prefix=/usr \
+      --libdir=/usr/lib \
+      --libexecdir=/usr/lib \
+      --with-sysroot="$sysroot" \
+      --with-native-system-header-dir=/usr/include \
+      --with-slibdir=/usr/lib \
+      --disable-bootstrap \
+      --disable-fixincludes \
+      --disable-multilib \
+      --disable-nls \
+      --disable-werror \
+      --enable-languages=c \
+      --enable-shared \
+      --enable-threads=posix \
+      --without-isl
+
+    # Build only the compiler machinery required to construct target libgcc,
+    # then the target runtime itself. Compiler frontends and other GCC target
+    # libraries are not package payload here.
+    make -j "$PKG_JOBS" all-gcc
+    make -j "$PKG_JOBS" all-target-libgcc
+    make DESTDIR="$stage" install-target-libgcc
+
+    runtime=$(find "$stage" -name libgcc_s.so.1 -print)
+    test -n "$runtime"
+    test "$(printf '%s\n' "$runtime" | wc -l | tr -d ' ')" = 1
+
+    mkdir -p "$PKG_DESTDIR/usr/lib"
+    install -m 0755 "$runtime" "$PKG_DESTDIR/usr/lib/libgcc_s.so.1"
+
+    # Final libgcc authority must name the final libc/loader ABI, not the
+    # construction package or a bootstrap-only filename.
+    dynamic=$(readelf -d "$PKG_DESTDIR/usr/lib/libgcc_s.so.1")
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgcc_s.so.1]' >/dev/null
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      printf '%s\n' 'libgcc: runtime carries a build-time search path' >&2
+      exit 1
+    fi
+architectures:
+  build: [x86_64]
+  target: [x86_64]
