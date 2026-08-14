@@ -19,6 +19,7 @@ requirements:
 sources:
   - url: https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz
     name: glibc-2.44.tar.xz
+    unpack: archive
     sha256: 37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667
 build:
   language: posix-shell
@@ -29,7 +30,6 @@ build:
     test -d "$headers/linux"
     test -d "$headers/asm"
 
-    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
     mkdir glibc-build
     cd glibc-build
 

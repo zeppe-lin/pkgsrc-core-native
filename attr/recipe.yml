@@ -15,13 +15,13 @@ requirements: {}
 sources:
   - url: https://download.savannah.gnu.org/releases/attr/attr-2.6.0.tar.gz
     name: attr-2.6.0.tar.gz
+    unpack: archive
     sha256: d42fa374513180bb48cb11a46696f488240e5124ff1e6ad88b0abff706985612
 build:
   language: posix-shell
   script: |
     set -eu
 
-    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/attr-2.6.0.tar.gz"
     mkdir build
     cd build
 

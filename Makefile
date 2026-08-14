@@ -16,12 +16,12 @@ export BOOTSTRAP_WORK BOOTSTRAP_BUILD_ROOT BOOTSTRAP_SEED_SHA256
 export BOOTSTRAP_INTERPRETER BOOTSTRAP_TOOLCHAIN_PREFIX BOOTSTRAP_PRIVILEGE BOOTSTRAP_MAX_STEPS
 export BOOTSTRAP_SOURCE_DATE_EPOCH PKGCTL PKGSTATE_INIT
 
-.PHONY: all check check-bootstrap-harness check-dependencies check-filesystem check-glibc check-glibc-bootstrap check-libgcc check-linux-api-headers check-source-extraction
+.PHONY: all check check-bootstrap-harness check-dependencies check-filesystem check-glibc check-glibc-bootstrap check-libgcc check-linux-api-headers check-source-realization
 .PHONY: bootstrap-init bootstrap bootstrap-resume bootstrap-check bootstrap-clean
 
 all: check
 
-check: check-filesystem check-dependencies check-source-extraction check-linux-api-headers check-glibc check-glibc-bootstrap check-libgcc check-bootstrap-harness
+check: check-filesystem check-dependencies check-source-realization check-linux-api-headers check-glibc check-glibc-bootstrap check-libgcc check-bootstrap-harness
 
 check-filesystem:
 	@tests/contracts/check_filesystem_boundary.sh
@@ -29,8 +29,8 @@ check-filesystem:
 check-dependencies:
 	@tests/contracts/check_dependency_authority.sh
 
-check-source-extraction:
-	@tests/contracts/check_source_extraction.sh
+check-source-realization:
+	@tests/contracts/check_source_realization.sh
 
 check-linux-api-headers:
 	@tests/contracts/check_linux_api_headers.sh

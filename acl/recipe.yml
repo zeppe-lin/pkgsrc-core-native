@@ -17,6 +17,7 @@ requirements:
 sources:
   - url: https://download.savannah.gnu.org/releases/acl/acl-2.4.0.tar.gz
     name: acl-2.4.0.tar.gz
+    unpack: archive
     sha256: 73c853c3d44e1f693e5a96a986f1bd19d3d0dac2c7d453e796177774bc4e5f6a
 build:
   language: posix-shell
@@ -29,7 +30,6 @@ build:
     export LD_LIBRARY_PATH="$attr/usr/lib"
     export PKG_CONFIG_PATH="$attr/usr/lib/pkgconfig"
 
-    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/acl-2.4.0.tar.gz"
     mkdir build
     cd build
 

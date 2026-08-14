@@ -14,13 +14,13 @@ requirements: {}
 sources:
   - url: https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.8.tar.xz
     name: linux-7.1.8.tar.xz
+    unpack: archive
     sha256: ff01dcb449279d5b4cfccdb01fee639cf5ff1803f1749a77844dd33915422c49
 build:
   language: posix-shell
   script: |
     set -eu
 
-    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/linux-7.1.8.tar.xz"
     cd linux-7.1.8
 
     make -j "$PKG_JOBS" ARCH=x86_64 headers
