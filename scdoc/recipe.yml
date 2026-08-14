@@ -20,7 +20,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/scdoc-1.11.5.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/scdoc-1.11.5.tar.gz"
     cd scdoc-1.11.5
 
     make CC="${CC:-cc}" PREFIX=/usr DESTDIR="$PKG_DESTDIR" install

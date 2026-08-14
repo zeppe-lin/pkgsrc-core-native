@@ -20,7 +20,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/linux-7.1.8.tar.xz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/linux-7.1.8.tar.xz"
     cd linux-7.1.8
 
     make -j "$PKG_JOBS" ARCH=x86_64 headers
@@ -30,7 +30,7 @@ build:
       cd usr/include
       find . \( -type f -o -type l \) -name '*.h' -print |
         tar -cf - -T -
-    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar --no-same-owner --no-same-permissions -xf -)
 architectures:
   build: [x86_64]
   target: [x86_64]

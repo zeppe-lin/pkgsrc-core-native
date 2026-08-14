@@ -29,7 +29,7 @@ build:
     test -d "$headers/linux"
     test -d "$headers/asm"
 
-    tar -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
     mkdir glibc-build
     cd glibc-build
 

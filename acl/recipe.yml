@@ -29,7 +29,7 @@ build:
     export LD_LIBRARY_PATH="$attr/usr/lib"
     export PKG_CONFIG_PATH="$attr/usr/lib/pkgconfig"
 
-    tar -xf "$PKG_SOURCE_ROOT/acl-2.4.0.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/acl-2.4.0.tar.gz"
     mkdir build
     cd build
 

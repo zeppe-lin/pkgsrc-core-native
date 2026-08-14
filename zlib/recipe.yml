@@ -20,7 +20,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/zlib-1.3.2.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/zlib-1.3.2.tar.gz"
     mkdir build
     cd build
 

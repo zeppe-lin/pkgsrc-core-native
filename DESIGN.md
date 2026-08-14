@@ -80,6 +80,15 @@ This is a visible bootstrap seam, not ambient permission. Root-view composition,
 interpreter selection, credentials, isolation, and execution evidence belong to
 the native execution/orchestration stack.
 
+Source archive ownership is not construction authority. Archive members are
+created under the fixed execution credentials, and tar extraction always uses
+`--no-same-owner --no-same-permissions`. This keeps extraction semantics stable
+when the native supervisor runs with uid 0 but without ownership-changing
+capabilities, and prevents GNU tar's privileged defaults from making archive
+UID/GID or special permission restoration part of the build. Ordinary source
+mode bits, including executable bits, remain subject to the admitted build
+umask; source timestamps and file contents remain upstream source material.
+
 ## Bootstrap foundation
 
 The first package-owned bootstrap input is `linux-api-headers`. It publishes the

@@ -28,7 +28,7 @@ build:
     test -d "$linux_headers/linux"
     test -d "$linux_headers/asm"
 
-    tar -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/glibc-2.44.tar.xz"
     mkdir glibc-bootstrap-build glibc-bootstrap-stage
     cd glibc-bootstrap-build
 
@@ -65,11 +65,11 @@ build:
     (
       cd "$linux_headers"
       tar -cf - .
-    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar --no-same-owner --no-same-permissions -xf -)
     (
       cd "$stage/usr/include"
       tar -cf - .
-    ) | (cd "$PKG_DESTDIR/usr/include" && tar -xf -)
+    ) | (cd "$PKG_DESTDIR/usr/include" && tar --no-same-owner --no-same-permissions -xf -)
 
     mkdir -p "$PKG_DESTDIR/usr/lib"
     for object in crt1.o crti.o crtn.o; do

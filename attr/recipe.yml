@@ -21,7 +21,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/attr-2.6.0.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/attr-2.6.0.tar.gz"
     mkdir build
     cd build
 

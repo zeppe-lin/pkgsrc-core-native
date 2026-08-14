@@ -22,7 +22,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/xz-5.8.3.tar.xz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/xz-5.8.3.tar.xz"
     mkdir build
     cd build
 

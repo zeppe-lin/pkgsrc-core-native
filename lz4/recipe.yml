@@ -21,7 +21,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/lz4-1.10.0.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/lz4-1.10.0.tar.gz"
     cd lz4-1.10.0
 
     CFLAGS=$(printf '%s\n' "${CFLAGS:-}" | sed 's/-O. //')

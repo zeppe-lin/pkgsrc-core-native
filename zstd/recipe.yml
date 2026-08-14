@@ -28,7 +28,7 @@ build:
   script: |
     set -eu
 
-    tar -xf "$PKG_SOURCE_ROOT/zstd-1.5.7.tar.gz"
+    tar --no-same-owner --no-same-permissions -xf "$PKG_SOURCE_ROOT/zstd-1.5.7.tar.gz"
 
     lz4="$PKG_BUILD_INPUT_ROOT/lz4"
     xz="$PKG_BUILD_INPUT_ROOT/xz"
