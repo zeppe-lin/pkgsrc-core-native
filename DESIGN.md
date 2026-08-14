@@ -209,3 +209,76 @@ the package controller, and audit the result.
 The collection itself does not infer rootfs policy from visible package
 directories and individual recipes do not encode rootfs sequencing through fake
 runtime edges.
+
+## Bootstrap qualification campaign
+
+The repository carries a thin qualification harness for the first native
+construction closure. It is not another recipe executor or dependency solver.
+`make bootstrap` admits exactly one `pkgctl build libgcc` command; the native
+resolver discovers the build closure:
+
+```text
+linux-api-headers -> glibc-bootstrap -> libgcc
+```
+
+The harness never runs recipe programs directly and never loops over package
+names to construct them independently. Source acquisition, package-input
+projection, isolated execution, package-image creation, durable evidence,
+resume, and artifact publication remain `pkgctl` and library authority.
+
+### Seed-root authority
+
+The initial campaign still needs an external construction root because the
+native compiler/tool packages do not yet exist. That root must be a disposable,
+writable root view supplied explicitly with `BOOTSTRAP_BUILD_ROOT`; the harness
+refuses the live `/` hierarchy. It creates only the empty mount-point topology
+required by the native build adapter beneath that caller-owned root.
+
+`BOOTSTRAP_SEED_SHA256` names the seed-root authority. For reproducibility
+qualification it should be the SHA-256 of the exact rootfs archive used to
+materialize the root view. The harness domain-separates that caller-supplied
+seed identity into the empty construction campaign's state-target binding and
+command nonce. These are qualification identities only. They are not installed
+system truth and must not be reused as future rootfs deployment identities.
+
+The harness preflights the current external seed capabilities required by the
+three recipes, including the shell, compiler/C++ compiler, binutils inspection,
+GNU make, Python, ordinary POSIX/GNU build utilities, and GMP/MPFR/MPC
+headers. This inventory is intentionally visible: later native package
+authority should make entries disappear from the seed requirement rather than
+silently inheriting them forever.
+
+The build interpreter is an exact regular executable inside the supplied root
+view. `pkgctl` inspects and binds its bytes before execution; the interpreter's
+loader and shared-library paths then resolve inside the isolated construction
+root.
+
+### Start and resume
+
+`bootstrap-init` creates one empty provider-owned canonical state store using
+`pkgstate-init`, the private runtime hierarchy, and the public artifact root.
+It records the exact seed identity, build-root coordinate, interpreter, clean
+collection commit, and deterministic qualification nonce in the local
+workspace marker.
+
+`bootstrap` starts one bounded command. `bootstrap-resume` carries no catalog,
+goal, architecture, or binding restatement; it uses `pkgctl build --resume`
+and the command evidence admitted at start. `BOOTSTRAP_MAX_STEPS` is a positive
+per-invocation execution bound and may be increased for a later resume without
+turning the harness into an implicit retry loop.
+
+### Artifact qualification
+
+`bootstrap-check` requires a terminal successful build frontend result and
+exactly three published artifacts: `linux-api-headers`, `glibc-bootstrap`, and
+`libgcc`. It independently verifies the retained artifact SHA-256 values and
+key archive members, then checks the extracted `libgcc_s.so.1` SONAME, final
+`libc.so.6` and `ld-linux-x86-64.so.2` dependencies, and absence of
+RPATH/RUNPATH.
+
+The command emits `BOOTSTRAP_WORK/bootstrap.manifest`, a path-independent
+manifest containing the seed digest, admitted collection commit, and each
+artifact's SHA-256, binding identity, and image identity. Two builds using the
+same collection commit and exact seed-root archive on different execution hosts
+should be compared by this manifest. A difference is evidence to investigate;
+the harness does not normalize divergent results into agreement.

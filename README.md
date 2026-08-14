@@ -91,3 +91,83 @@ service-specific state directories, runtime device nodes, or rootfs composition
 policy. Those authorities must be supplied by the component that actually owns
 them. In particular, `filesystem` carries no `fstab`, `passwd`, `group`,
 `shadow`, `securetty`, `issue`, `motd`, `shells`, or MIME database bytes.
+
+## Bootstrap qualification
+
+The first native construction closure can be exercised through the repository
+Makefile without bypassing `pkgctl`:
+
+```text
+linux-api-headers -> glibc-bootstrap -> libgcc
+```
+
+Prepare a **disposable writable extraction** of a known construction root. For
+the first cross-host qualification, use the same Zeppe-Lin 1.x rootfs archive
+on both machines and use that archive's SHA-256 as the seed identity. Do not use
+the live `/` hierarchy.
+
+For example:
+
+```sh
+seed_archive=/path/to/zeppe-lin-1.x-rootfs.tar.xz
+seed_root=/var/tmp/zeppe-lin-native-seed
+seed_sha256=$(sha256sum "$seed_archive" | awk '{print $1}')
+
+rm -rf "$seed_root"
+mkdir -p "$seed_root"
+tar -xpf "$seed_archive" -C "$seed_root"
+
+make bootstrap-init \
+  BOOTSTRAP_BUILD_ROOT="$seed_root" \
+  BOOTSTRAP_SEED_SHA256="$seed_sha256"
+```
+
+`bootstrap-init` chooses a regular bash/dash interpreter inside the seed root
+when one is available. An exact path can instead be supplied explicitly:
+
+```sh
+make bootstrap-init \
+  BOOTSTRAP_BUILD_ROOT="$seed_root" \
+  BOOTSTRAP_SEED_SHA256="$seed_sha256" \
+  BOOTSTRAP_INTERPRETER="$seed_root/usr/bin/bash"
+```
+
+Native Linux isolation normally needs privilege. Keep `make` itself under the
+calling user and let the harness elevate only the `pkgctl` process:
+
+```sh
+make bootstrap BOOTSTRAP_PRIVILEGE=sudo
+```
+
+This preserves the calling user's numeric build credentials while granting the
+controller the mount/namespace authority it needs. The command is bounded;
+when the report says `complete no`, continue the same retained command with:
+
+```sh
+make bootstrap-resume BOOTSTRAP_PRIVILEGE=sudo
+```
+
+After a terminal result:
+
+```sh
+make bootstrap-check
+cat .bootstrap/bootstrap.manifest
+```
+
+`bootstrap-check` requires exactly the three expected artifacts and independently
+checks their retained hashes plus the final `libgcc_s.so.1` ELF runtime closure.
+For the first reproducibility experiment, run the same collection commit and
+same seed rootfs archive once on the current Zeppe-Lin machine and once on the
+Ubuntu machine, then compare the two `bootstrap.manifest` files byte for byte.
+The host userspace is thereby held constant; the host kernel is the principal
+remaining machine-level difference.
+
+The workspace is intentionally local and ignored by Git. Remove it explicitly
+with:
+
+```sh
+make bootstrap-clean BOOTSTRAP_PRIVILEGE=sudo
+```
+
+The bootstrap harness is qualification machinery, not rootfs composition and
+not a replacement package manager. It never runs recipe bodies directly.
