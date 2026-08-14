@@ -229,10 +229,12 @@ resume, and artifact publication remain `pkgctl` and library authority.
 ### Seed-root authority
 
 The initial campaign still needs an external construction root because the
-native compiler/tool packages do not yet exist. That root must be a disposable,
-writable root view supplied explicitly with `BOOTSTRAP_BUILD_ROOT`; the harness
-refuses the live `/` hierarchy. It creates only the empty mount-point topology
-required by the native build adapter beneath that caller-owned root.
+native compiler/tool packages do not yet exist. That root must be a disposable
+root view supplied explicitly with `BOOTSTRAP_BUILD_ROOT`; the harness refuses
+the live `/` hierarchy. The root view may retain normal root ownership. When
+mount-point topology is absent, `bootstrap-init` may use the explicitly supplied
+`BOOTSTRAP_PRIVILEGE` command only to create the empty directories required by
+the native build adapter. Repository-side workspace creation remains unprivileged.
 
 `BOOTSTRAP_SEED_SHA256` names the seed-root authority. For reproducibility
 qualification it should be the SHA-256 of the exact rootfs archive used to
@@ -252,6 +254,23 @@ The build interpreter is an exact regular executable inside the supplied root
 view. `pkgctl` inspects and binds its bytes before execution; the interpreter's
 loader and shared-library paths then resolve inside the isolated construction
 root.
+
+### Private controller toolchain
+
+The bootstrap controller itself is not a host `/usr` tool. `BOOTSTRAP_TOOLCHAIN_PREFIX`
+binds the private prefix produced by the native zoo build harness. When omitted,
+the campaign uses `NEW_TOOLCHAIN_PREFIX` if already exported by `.toolchain-env`;
+otherwise it uses the sibling `../.toolchain` prefix expected by the default
+repository layout.
+
+`pkgctl` and `pkgstate-init` must resolve beneath that exact prefix. Their host
+execution environment mirrors the native zoo harness: the prefix `bin` leads
+`PATH`, the prefix pkg-config directories lead `PKG_CONFIG_PATH`, the prefix
+`lib` leads `LD_LIBRARY_PATH`, and the prefix leads `CMAKE_PREFIX_PATH`. A
+privileged controller invocation executes `PRIVILEGE env ... pkgctl`; the
+private dynamic-library path is therefore established after privilege entry
+rather than relying on `sudo` to preserve loader-sensitive environment names.
+The harness never falls back to a same-named system `pkgctl`.
 
 ### Start and resume
 

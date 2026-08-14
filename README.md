@@ -101,7 +101,7 @@ Makefile without bypassing `pkgctl`:
 linux-api-headers -> glibc-bootstrap -> libgcc
 ```
 
-Prepare a **disposable writable extraction** of a known construction root. For
+Prepare a **disposable extraction** of a known construction root. For
 the first cross-host qualification, use the same Zeppe-Lin 1.x rootfs archive
 on both machines and use that archive's SHA-256 as the seed identity. Do not use
 the live `/` hierarchy.
@@ -118,9 +118,33 @@ mkdir -p "$seed_root"
 tar -xpf "$seed_archive" -C "$seed_root"
 
 make bootstrap-init \
+  BOOTSTRAP_PRIVILEGE=sudo \
   BOOTSTRAP_BUILD_ROOT="$seed_root" \
   BOOTSTRAP_SEED_SHA256="$seed_sha256"
 ```
+
+The extracted root may remain root-owned. `BOOTSTRAP_PRIVILEGE=sudo` is used only
+when the empty build/check/target mountpoint topology must be created; do not
+`chown -R` the seed root.
+
+The harness also consumes the private native-toolchain prefix built by the
+zoo-level `build-new-toolchain.sh`. With the normal sibling layout it discovers
+`../.toolchain` automatically. If `source ../.toolchain-env` has already exported
+`NEW_TOOLCHAIN_PREFIX`, that prefix wins. A custom prefix can be explicit:
+
+```sh
+make bootstrap-init \
+  BOOTSTRAP_TOOLCHAIN_PREFIX=/path/to/.toolchain \
+  BOOTSTRAP_PRIVILEGE=sudo \
+  BOOTSTRAP_BUILD_ROOT="$seed_root" \
+  BOOTSTRAP_SEED_SHA256="$seed_sha256"
+```
+
+`pkgctl` and `pkgstate-init` are required to come from that prefix. The harness
+reconstructs its `PATH`, `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and
+`CMAKE_PREFIX_PATH` for every controller invocation. For privileged `pkgctl`,
+that environment is established through `sudo env ...` after privilege entry,
+so loader paths are not lost to sudo filtering.
 
 `bootstrap-init` chooses a regular bash/dash interpreter inside the seed root
 when one is available. An exact path can instead be supplied explicitly:

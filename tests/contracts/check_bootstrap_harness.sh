@@ -26,6 +26,19 @@ grep -F -- '--max-steps "$max_steps"' "$harness" >/dev/null || \
   fail 'bootstrap execution bound is not explicit'
 grep -F 'pkgstate_init_bin' "$harness" >/dev/null || \
   fail 'bootstrap does not use provider-owned empty-state initialization'
+grep -F 'BOOTSTRAP_TOOLCHAIN_PREFIX' "$makefile" >/dev/null || \
+  fail 'Makefile does not expose private toolchain authority'
+grep -F 'toolchain_prefix/bin/$requested' "$harness" >/dev/null || \
+  fail 'controller tools are not resolved inside the private toolchain prefix'
+grep -F '"LD_LIBRARY_PATH=$toolchain_ld_library_path"' "$harness" >/dev/null || \
+  fail 'private toolchain library path is not carried into controller execution'
+grep -F '"$privilege_bin" "$env_bin"' "$harness" >/dev/null || \
+  fail 'privileged controller execution does not establish environment after privilege entry'
+grep -F 'set BOOTSTRAP_PRIVILEGE' "$harness" >/dev/null || \
+  fail 'root-owned seed mountpoints cannot request narrow provisioning authority'
+if grep -F '"$privilege_bin" "$pkgctl_bin"' "$harness" >/dev/null; then
+  fail 'privileged pkgctl bypasses private toolchain environment reconstruction'
+fi
 grep -F 'BOOTSTRAP_SEED_SHA256 is required' "$harness" >/dev/null || \
   fail 'bootstrap root-view provenance is not caller-bound'
 grep -F "BOOTSTRAP_BUILD_ROOT must be a disposable root view, not the live /" "$harness" >/dev/null || \

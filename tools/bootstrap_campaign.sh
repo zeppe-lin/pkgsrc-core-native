@@ -19,6 +19,7 @@ work=${BOOTSTRAP_WORK:-$repo/.bootstrap}
 build_root=${BOOTSTRAP_BUILD_ROOT:-}
 seed_sha256=${BOOTSTRAP_SEED_SHA256:-}
 interpreter_requested=${BOOTSTRAP_INTERPRETER:-}
+toolchain_prefix_requested=${BOOTSTRAP_TOOLCHAIN_PREFIX:-${NEW_TOOLCHAIN_PREFIX:-}}
 pkgctl_requested=${PKGCTL:-pkgctl}
 pkgstate_init_requested=${PKGSTATE_INIT:-pkgstate-init}
 privilege_requested=${BOOTSTRAP_PRIVILEGE:-}
@@ -182,6 +183,25 @@ find_seed_tool()
   fail "seed root lacks required construction tool in /usr/bin or /bin: $name"
 }
 
+ensure_seed_directory()
+{
+  relative=$1
+  mode=$2
+  path=$build_root/$relative
+  if [ -d "$path" ]; then
+    return 0
+  fi
+  if mkdir -p "$path" 2>/dev/null; then
+    chmod "$mode" "$path" || \
+      fail "cannot set seed-root mountpoint mode: $path"
+    return 0
+  fi
+  [ -n "$privilege_bin" ] || \
+    fail "cannot provision seed-root mountpoint $path; set BOOTSTRAP_PRIVILEGE"
+  "$privilege_bin" install -d -m "$mode" -- "$path" || \
+    fail "cannot provision seed-root mountpoint with privilege: $path"
+}
+
 preflight_seed_root()
 {
   require_build_root
@@ -194,11 +214,10 @@ preflight_seed_root()
     check/source \
     check/package \
     check/inputs \
-    target \
-    tmp; do
-    mkdir -p "$build_root/$directory" || \
-      fail "seed root is not a writable disposable root view: $build_root"
+    target; do
+    ensure_seed_directory "$directory" 0755
   done
+  ensure_seed_directory tmp 1777
 
   for tool in \
     tar xz make find cc gcc g++ python3 install grep sed gawk bison \
@@ -238,6 +257,13 @@ load_marker_authority()
   recorded_root=$(sed -n 's/^build-root=//p' "$marker")
   recorded_interpreter=$(sed -n 's/^interpreter=//p' "$marker")
   recorded_collection_commit=$(sed -n 's/^collection-commit=//p' "$marker")
+  recorded_toolchain_prefix=$(sed -n 's/^toolchain-prefix=//p' "$marker")
+  [ -n "$recorded_toolchain_prefix" ] || \
+    fail 'bootstrap workspace lacks private toolchain authority; clean and reinitialize'
+  if [ -n "$toolchain_prefix" ]; then
+    [ "$recorded_toolchain_prefix" = "$toolchain_prefix" ] || \
+      fail 'BOOTSTRAP_TOOLCHAIN_PREFIX differs from initialized workspace authority'
+  fi
 
   if [ -z "$seed_sha256" ]; then
     seed_sha256=$recorded_seed
@@ -272,25 +298,97 @@ binding_arguments()
 }
 
 
+toolchain_prefix=
+toolchain_path=
+toolchain_pkg_config_path=
+toolchain_ld_library_path=
+toolchain_cmake_prefix_path=
 pkgctl_bin=
 pkgstate_init_bin=
 privilege_bin=
+env_bin=
+
+resolve_privilege()
+{
+  if [ -n "$privilege_requested" ] && [ -z "$privilege_bin" ]; then
+    privilege_bin=$(require_command "$privilege_requested")
+  fi
+}
+
+resolve_private_tool()
+{
+  requested=$1
+  label=$2
+  case $requested in
+    /*)
+      candidate=$requested
+      ;;
+    */*)
+      fail "$label must be a basename or absolute path inside BOOTSTRAP_TOOLCHAIN_PREFIX"
+      ;;
+    *)
+      candidate=$toolchain_prefix/bin/$requested
+      ;;
+  esac
+  [ -x "$candidate" ] || fail "$label is not executable in private toolchain: $candidate"
+  candidate=$(realpath "$candidate")
+  case $candidate in
+    "$toolchain_prefix"/*)
+      ;;
+    *)
+      fail "$label escapes BOOTSTRAP_TOOLCHAIN_PREFIX: $candidate"
+      ;;
+  esac
+  printf '%s\n' "$candidate"
+}
+
+resolve_toolchain_prefix()
+{
+  requested=$toolchain_prefix_requested
+  if [ -z "$requested" ]; then
+    requested=$(CDPATH= cd -- "$repo/.." && pwd)/.toolchain
+  fi
+  toolchain_prefix=$(canonical_directory "$requested" BOOTSTRAP_TOOLCHAIN_PREFIX)
+  [ -d "$toolchain_prefix/lib" ] || \
+    fail "private toolchain lacks lib directory: $toolchain_prefix/lib"
+
+  toolchain_path=$toolchain_prefix/bin${PATH:+:$PATH}
+  toolchain_pkg_config_path=$toolchain_prefix/lib/pkgconfig:$toolchain_prefix/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+  toolchain_ld_library_path=$toolchain_prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+  toolchain_cmake_prefix_path=$toolchain_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}
+
+  pkgctl_bin=$(resolve_private_tool "$pkgctl_requested" PKGCTL)
+  pkgstate_init_bin=$(resolve_private_tool "$pkgstate_init_requested" PKGSTATE_INIT)
+  env_bin=$(require_command env)
+}
 
 resolve_controller_tools()
 {
-  pkgctl_bin=$(require_command "$pkgctl_requested")
-  pkgstate_init_bin=$(require_command "$pkgstate_init_requested")
-  if [ -n "$privilege_requested" ]; then
-    privilege_bin=$(require_command "$privilege_requested")
-  fi
+  resolve_privilege
+  resolve_toolchain_prefix
+}
+
+run_private_tool()
+{
+  "$env_bin" \
+    "PATH=$toolchain_path" \
+    "PKG_CONFIG_PATH=$toolchain_pkg_config_path" \
+    "LD_LIBRARY_PATH=$toolchain_ld_library_path" \
+    "CMAKE_PREFIX_PATH=$toolchain_cmake_prefix_path" \
+    "$@"
 }
 
 run_pkgctl()
 {
   if [ -n "$privilege_bin" ]; then
-    "$privilege_bin" "$pkgctl_bin" "$@"
+    "$privilege_bin" "$env_bin" \
+      "PATH=$toolchain_path" \
+      "PKG_CONFIG_PATH=$toolchain_pkg_config_path" \
+      "LD_LIBRARY_PATH=$toolchain_ld_library_path" \
+      "CMAKE_PREFIX_PATH=$toolchain_cmake_prefix_path" \
+      "$pkgctl_bin" "$@"
   else
-    "$pkgctl_bin" "$@"
+    run_private_tool "$pkgctl_bin" "$@"
   fi
 }
 
@@ -505,9 +603,9 @@ init_campaign()
   require_build_root
   require_clean_collection
   admitted_collection_commit=$(collection_commit)
+  resolve_controller_tools
   preflight_seed_root
   interpreter=$(resolve_interpreter)
-  resolve_controller_tools
 
   if [ -e "$marker" ]; then
     fail "bootstrap workspace already exists: $work"
@@ -518,7 +616,7 @@ init_campaign()
   done
 
   # shellcheck disable=SC2046
-  "$pkgstate_init_bin" --canonical-store "$state" $(binding_arguments)
+  run_private_tool "$pkgstate_init_bin" --canonical-store "$state" $(binding_arguments)
 
   cat >"$marker" <<MARKER
 format=zeppe-lin.bootstrap-workspace/1
@@ -527,6 +625,7 @@ build-root=$build_root
 interpreter=$interpreter
 collection=$repo
 collection-commit=$admitted_collection_commit
+toolchain-prefix=$toolchain_prefix
 nonce=$(command_nonce)
 MARKER
 
@@ -536,6 +635,7 @@ MARKER
     "build-root=$build_root" \
     "interpreter=$interpreter" \
     "collection-commit=$admitted_collection_commit" \
+    "toolchain-prefix=$toolchain_prefix" \
     "nonce=$(command_nonce)" \
     'goal=build=libgcc'
 }
