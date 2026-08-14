@@ -247,8 +247,53 @@ reports=$work/reports
 latest=$work/latest.out
 latest_error=$work/latest.err
 manifest=$work/bootstrap.manifest
+collection_projection=$work/collection
 
 runtime_directories='command-evidence run evidence effects content construction-sessions package-outputs check-temporary'
+
+stage_collection_projection()
+{
+  commit=$1
+  git_bin=$(require_command git)
+  tar_bin=$(require_command tar)
+  entries=$work/.collection-entries.$$
+  temporary=$work/.collection.$$
+  rm -rf -- "$temporary"
+  mkdir -p -- "$temporary"
+  : >"$entries"
+
+  "$git_bin" -C "$repo" ls-tree -d --name-only "$commit" |
+    while IFS= read -r entry; do
+      if "$git_bin" -C "$repo" cat-file -e "$commit:$entry/recipe.yml" 2>/dev/null; then
+        printf '%s\n' "$entry"
+      fi
+    done >"$entries"
+
+  [ -s "$entries" ] || fail 'admitted collection commit contains no package entries'
+
+  set --
+  while IFS= read -r entry; do
+    set -- "$@" "$entry"
+  done <"$entries"
+  if "$git_bin" -C "$repo" cat-file -e "$commit:profiles.yml" 2>/dev/null; then
+    set -- "$@" profiles.yml
+  fi
+
+  "$git_bin" -C "$repo" archive --format=tar "$commit" -- "$@" |
+    "$tar_bin" -xf - -C "$temporary"
+  rm -f -- "$entries"
+
+  for entry in "$temporary"/*; do
+    [ -e "$entry" ] || continue
+    if [ -d "$entry" ]; then
+      [ -f "$entry/recipe.yml" ] ||
+        fail "collection projection admitted non-package directory: $entry"
+    fi
+  done
+
+  rm -rf -- "$collection_projection"
+  mv -- "$temporary" "$collection_projection"
+}
 
 load_marker_authority()
 {
@@ -425,6 +470,7 @@ start_campaign()
   require_clean_collection
   [ "$(collection_commit)" = "$recorded_collection_commit" ] || \
     fail 'pkgsrc-core-native HEAD differs from initialized bootstrap authority'
+  stage_collection_projection "$recorded_collection_commit"
   [ ! -e "$runtime/command-evidence/command-$(command_nonce).pce" ] || \
     fail 'bootstrap command authority already exists; use make bootstrap-resume'
 
@@ -434,7 +480,7 @@ start_campaign()
 
   set -- build libgcc \
     --canonical-store "$state" \
-    --collection "core-native=$repo" \
+    --collection "core-native=$collection_projection" \
     --build-architecture x86_64 \
     --target-architecture x86_64 \
     --start "$(command_nonce)" \
@@ -614,6 +660,7 @@ init_campaign()
   for directory in $runtime_directories; do
     mkdir -p "$runtime/$directory"
   done
+  stage_collection_projection "$admitted_collection_commit"
 
   # shellcheck disable=SC2046
   run_private_tool "$pkgstate_init_bin" --canonical-store "$state" $(binding_arguments)
@@ -635,6 +682,7 @@ MARKER
     "build-root=$build_root" \
     "interpreter=$interpreter" \
     "collection-commit=$admitted_collection_commit" \
+    "collection-projection=$collection_projection" \
     "toolchain-prefix=$toolchain_prefix" \
     "nonce=$(command_nonce)" \
     'goal=build=libgcc'

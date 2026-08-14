@@ -127,6 +127,14 @@ The extracted root may remain root-owned. `BOOTSTRAP_PRIVILEGE=sudo` is used onl
 when the empty build/check/target mountpoint topology must be created; do not
 `chown -R` the seed root.
 
+Catalog acquisition does not point at the repository root. `bootstrap-init` and
+`bootstrap` derive `.bootstrap/collection` from the admitted Git commit, including
+only immediate committed package directories that contain `recipe.yml` and the
+committed `profiles.yml` when one exists. Repository machinery such as `tests/`,
+`tools/`, `Makefile`, and design documentation therefore never enters collection
+discovery authority. The projection is regenerated from the recorded commit
+before a new command is admitted.
+
 The harness also consumes the private native-toolchain prefix built by the
 zoo-level `build-new-toolchain.sh`. With the normal sibling layout it discovers
 `../.toolchain` automatically. If `source ../.toolchain-env` has already exported

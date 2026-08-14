@@ -14,8 +14,14 @@ done
 
 grep -F 'set -- build libgcc ' "$harness" >/dev/null || \
   fail 'bootstrap start is not one pkgctl build libgcc campaign'
-grep -F -- '--collection "core-native=$repo"' "$harness" >/dev/null || \
-  fail 'bootstrap does not bind the explicit native collection'
+grep -F -- '--collection "core-native=$collection_projection"' "$harness" >/dev/null || \
+  fail 'bootstrap does not bind the committed collection projection'
+grep -F 'stage_collection_projection "$recorded_collection_commit"' "$harness" >/dev/null || \
+  fail 'bootstrap start does not regenerate collection authority from the admitted commit'
+grep -F 'archive --format=tar "$commit" -- "$@"' "$harness" >/dev/null || \
+  fail 'collection projection is not derived from committed Git bytes'
+grep -F 'cat-file -e "$commit:$entry/recipe.yml"' "$harness" >/dev/null || \
+  fail 'collection projection does not select package entries by recipe authority'
 grep -F -- '--build-architecture x86_64' "$harness" >/dev/null || \
   fail 'bootstrap build architecture is not explicit'
 grep -F -- '--target-architecture x86_64' "$harness" >/dev/null || \
@@ -49,6 +55,8 @@ grep -F 'expected exactly 3' "$harness" >/dev/null || \
 if grep -E '(^|[[:space:]])(\./)?(linux-api-headers|glibc-bootstrap|libgcc)/recipe\.yml' "$harness" >/dev/null; then
   fail 'bootstrap harness reaches into recipe bodies instead of pkgctl authority'
 fi
+grep -F 'ls-tree -d --name-only "$commit"' "$harness" >/dev/null || \
+  fail 'collection projection does not enumerate committed top-level directories'
 start_count=$(grep -Fc 'set -- build libgcc ' "$harness")
 [ "$start_count" -eq 1 ] || \
   fail 'bootstrap harness must contain exactly one package-build start'
