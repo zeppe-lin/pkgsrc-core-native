@@ -19,9 +19,11 @@ mkdir -p "$seed/bin" "$seed/usr/bin" "$seed/usr/include" "$toolchain/bin" "$tool
 printf '#!/bin/sh\nexit 0\n' >"$seed/bin/bootstrap-tool"
 chmod 0755 "$seed/bin/bootstrap-tool"
 ln -s bootstrap-tool "$seed/bin/bash"
+ln -s bootstrap-tool "$seed/bin/sh"
 for tool in \
-  tar xz make find cc gcc g++ python3 install grep sed gawk bison \
-  as ld ar nm ranlib objcopy objdump readelf strip wc tr mkdir rm mv ln; do
+  ar as awk basename bison cat cc chmod cp dirname expr find flex g++ gawk gcc \
+  grep install ld ln ls m4 make mkdir mv nm objcopy objdump python3 ranlib \
+  readelf rm sed sha256sum sort strip tar touch tr uname wc xz; do
   ln -s ../../bin/bootstrap-tool "$seed/usr/bin/$tool"
 done
 for header in gmp.h mpfr.h mpc.h; do
@@ -71,6 +73,37 @@ done
 
 grep -Fx "build-root=$seed" "$work/.pkgsrc-core-native-bootstrap-v1" >/dev/null || \
   fail 'bootstrap workspace did not retain exact hostile-minimal root authority'
+
+cat >"$toolchain/bin/pkgctl" <<'SCRIPT'
+#!/bin/sh
+printf '%s\n' "$@" >"$QUALIFY_CAPTURE"
+printf '%s\n' \
+  'complete yes' \
+  'failed no' \
+  'frontend build'
+SCRIPT
+chmod 0755 "$toolchain/bin/pkgctl"
+QUALIFY_CAPTURE=$temporary/qualify.args \
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" qualify >"$temporary/qualify.out"
+grep -Fx 'build' "$temporary/qualify.args" >/dev/null || \
+  fail 'qualification did not invoke build frontend'
+grep -Fx 'seed-probe' "$temporary/qualify.args" >/dev/null || \
+  fail 'qualification did not select seed-probe subject'
+grep -Fx -- '--check' "$temporary/qualify.args" >/dev/null || \
+  fail 'qualification did not request seed-probe check'
+grep -F 'bootstrap-seed-probe=' "$temporary/qualify.args" >/dev/null || \
+  fail 'qualification did not bind committed seed-probe collection'
+grep -Fx 'bootstrap seed runtime qualification: ok' "$temporary/qualify.out" >/dev/null || \
+  fail 'qualification did not report terminal success'
+[ ! -e "$work/qualification" ] || \
+  fail 'successful qualification retained private probe workspace'
 
 rm -rf "$work"
 rmdir "$seed/dev"

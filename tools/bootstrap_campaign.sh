@@ -5,7 +5,7 @@ set -eu
 
 command_name=${1:-}
 [ -n "$command_name" ] || {
-  printf '%s\n' 'usage: bootstrap_campaign.sh {init|start|resume|check|clean}' >&2
+  printf '%s\n' 'usage: bootstrap_campaign.sh {init|qualify|start|resume|check|clean}' >&2
   exit 2
 }
 shift
@@ -180,6 +180,21 @@ find_seed_tool()
   fail "seed root lacks required construction tool in /usr/bin or /bin: $name"
 }
 
+require_seed_executable()
+{
+  logical=$1
+  path=$build_root$logical
+  [ -x "$path" ] || fail "seed root lacks required executable: $logical"
+  resolved=$(realpath "$path" 2>/dev/null || :)
+  case $resolved in
+    "$build_root"/*)
+      ;;
+    *)
+      fail "seed executable escapes BOOTSTRAP_BUILD_ROOT: $logical"
+      ;;
+  esac
+}
+
 ensure_seed_directory()
 {
   relative=$1
@@ -219,9 +234,11 @@ preflight_seed_root()
   done
   ensure_seed_directory tmp 1777
 
+  require_seed_executable /bin/sh
   for tool in \
-    tar xz make find cc gcc g++ python3 install grep sed gawk bison \
-    as ld ar nm ranlib objcopy objdump readelf strip wc tr mkdir rm mv ln; do
+    ar as awk basename bison cat cc chmod cp dirname expr find flex g++ gawk gcc \
+    grep install ld ln ls m4 make mkdir mv nm objcopy objdump python3 ranlib \
+    readelf rm sed sha256sum sort strip tar touch tr uname wc xz; do
     find_seed_tool "$tool"
   done
   for header in gmp.h mpfr.h mpc.h; do
@@ -243,6 +260,13 @@ latest=$work/latest.out
 latest_error=$work/latest.err
 manifest=$work/bootstrap.manifest
 collection_projection=$work/collection
+qualification=$work/qualification
+qualification_collection=$qualification/collection
+qualification_state=$qualification/state
+qualification_runtime=$qualification/runtime
+qualification_artifacts=$qualification/artifacts
+qualification_report=$qualification/report.out
+qualification_error=$qualification/report.err
 
 runtime_directories='command-evidence run evidence effects content construction-sessions package-outputs check-temporary'
 
@@ -288,6 +312,37 @@ stage_collection_projection()
 
   rm -rf -- "$collection_projection"
   mv -- "$temporary" "$collection_projection"
+}
+
+stage_qualification_projection()
+{
+  commit=$1
+  git_bin=$(require_command git)
+  tar_bin=$(require_command tar)
+  temporary=$qualification/.collection.$$
+  rm -rf -- "$temporary" "$qualification_collection"
+  mkdir -p -- "$temporary"
+
+  "$git_bin" -C "$repo" archive --format=tar "$commit" -- \
+    tests/fixtures/collections/bootstrap-seed-probe |
+    "$tar_bin" -xf - -C "$temporary"
+  source=$temporary/tests/fixtures/collections/bootstrap-seed-probe
+  [ -f "$source/seed-probe/recipe.yml" ] ||
+    fail 'committed bootstrap seed-probe fixture is absent'
+  mv -- "$source" "$qualification_collection"
+  rm -rf -- "$temporary"
+}
+
+remove_qualification()
+{
+  [ -e "$qualification" ] || return 0
+  if rm -rf -- "$qualification" 2>/dev/null; then
+    return 0
+  fi
+  [ -n "$privilege_bin" ] ||
+    fail "bootstrap qualification contains privileged files; set BOOTSTRAP_PRIVILEGE for cleanup"
+  "$privilege_bin" rm -rf -- "$qualification" ||
+    fail 'cannot remove previous bootstrap qualification workspace'
 }
 
 load_marker_authority()
@@ -341,6 +396,21 @@ binding_arguments()
     --root-view "$(identity_for root-view)" \
     --state-backend "$(identity_for state-backend)" \
     --publication-domain "$(identity_for publication-domain)"
+}
+
+qualification_binding_arguments()
+{
+  printf '%s\n' \
+    --managed-target "$(identity_for qualification-managed-target)" \
+    --state-store "$(identity_for qualification-state-store)" \
+    --root-view "$(identity_for qualification-root-view)" \
+    --state-backend "$(identity_for qualification-state-backend)" \
+    --publication-domain "$(identity_for qualification-publication-domain)"
+}
+
+qualification_nonce()
+{
+  hash_material "zeppe-lin/pkgsrc-core-native/bootstrap-qualification/1:seed-probe:$seed_sha256"
 }
 
 
@@ -497,6 +567,70 @@ append_groups_and_run()
   [ "$status" -eq 0 ] || fail "pkgctl build returned status $status"
 }
 
+qualify_seed_runtime()
+{
+  resolve_controller_tools
+  load_marker_authority
+  require_recorded_supervisor
+  require_seed
+  require_build_root
+  require_clean_collection
+  [ "$(collection_commit)" = "$recorded_collection_commit" ] || \
+    fail 'pkgsrc-core-native HEAD differs from initialized bootstrap authority'
+  preflight_seed_root
+
+  remove_qualification
+  mkdir -p "$qualification" "$qualification_runtime" "$qualification_artifacts"
+  for directory in $runtime_directories; do
+    mkdir -p "$qualification_runtime/$directory"
+  done
+  stage_qualification_projection "$recorded_collection_commit"
+
+  # shellcheck disable=SC2046
+  run_private_tool "$pkgstate_init_bin" --canonical-store "$qualification_state" \
+    $(qualification_binding_arguments)
+
+  interpreter=$(resolve_interpreter)
+  set -- build seed-probe --check \
+    --canonical-store "$qualification_state" \
+    --collection "bootstrap-seed-probe=$qualification_collection" \
+    --build-architecture x86_64 \
+    --target-architecture x86_64 \
+    --start "$(qualification_nonce)" \
+    --runtime-root "$qualification_runtime" \
+    --build-root "$build_root" \
+    --artifact-root "$qualification_artifacts" \
+    --interpreter "$interpreter" \
+    --build-user-id "$supervisor_uid" \
+    --build-group-id "$supervisor_gid" \
+    --source-date-epoch "$source_date_epoch" \
+    --max-steps 2
+  # shellcheck disable=SC2046
+  set -- "$@" $(qualification_binding_arguments)
+  for group in $supervisor_groups; do
+    [ "$group" = "$supervisor_gid" ] || \
+      set -- "$@" --build-supplementary-group "$group"
+  done
+
+  set +e
+  run_pkgctl "$@" >"$qualification_report" 2>"$qualification_error"
+  status=$?
+  set -e
+  cat "$qualification_report"
+  if [ -s "$qualification_error" ]; then
+    cat "$qualification_error" >&2
+  fi
+  [ "$status" -eq 0 ] || \
+    fail "native bootstrap seed qualification failed; retained evidence: $qualification"
+  grep -Fx 'complete yes' "$qualification_report" >/dev/null || \
+    fail "native bootstrap seed qualification did not complete; retained evidence: $qualification"
+  grep -Fx 'failed no' "$qualification_report" >/dev/null || \
+    fail "native bootstrap seed qualification reported failure; retained evidence: $qualification"
+
+  remove_qualification
+  printf '%s\n' 'bootstrap seed runtime qualification: ok'
+}
+
 start_campaign()
 {
   resolve_controller_tools
@@ -507,6 +641,7 @@ start_campaign()
   require_clean_collection
   [ "$(collection_commit)" = "$recorded_collection_commit" ] || \
     fail 'pkgsrc-core-native HEAD differs from initialized bootstrap authority'
+  qualify_seed_runtime
   stage_collection_projection "$recorded_collection_commit"
   [ ! -e "$runtime/command-evidence/command-$(command_nonce).pce" ] || \
     fail 'bootstrap command authority already exists; use make bootstrap-resume'
@@ -759,6 +894,9 @@ clean_campaign()
 case $command_name in
   init)
     init_campaign
+    ;;
+  qualify)
+    qualify_seed_runtime
     ;;
   start)
     start_campaign

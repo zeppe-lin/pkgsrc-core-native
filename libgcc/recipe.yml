@@ -56,7 +56,9 @@ build:
       --enable-languages=c \
       --enable-shared \
       --enable-threads=posix \
-      --without-isl
+      --without-isl \
+      --without-zstd \
+      MAKEINFO=missing
 
     # Build only the compiler machinery required to construct target libgcc,
     # then the target runtime itself. Compiler frontends and other GCC target

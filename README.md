@@ -175,8 +175,30 @@ make bootstrap-init \
   BOOTSTRAP_INTERPRETER="$seed_root/usr/bin/bash"
 ```
 
-Native Linux isolation normally needs privilege. Keep `make` itself under the
-calling user and let the harness elevate only the `pkgctl` process:
+`bootstrap-init` proves structural seed authority: exact mountpoint topology,
+recorded seed identity, controller authority, and the required tool coordinates.
+Before spending the real construction campaign, exercise those coordinates as
+runtime authority through the same native execution stack:
+
+```sh
+make bootstrap-qualify BOOTSTRAP_PRIVILEGE=sudo
+```
+
+The qualification command stages a committed `seed-probe` fixture from the
+recorded collection commit and admits one real `pkgctl build seed-probe --check`
+transaction. The build/check pair exercises the private `/dev/null`, writable
+build/check temporary homes, exact `/bin/sh`, C and C++14 compilation and
+execution, GMP/MPFR/MPC linkage, GNU make shell execution, Bison/Flex, Python,
+archive/compression tools, binutils inspection, and the late
+`sha256sum`/`awk`/`readelf` check closure. It has no source acquisition or network
+requirement. Qualification uses a separate private state/runtime/artifact domain;
+on success that workspace is removed, while failure evidence is retained for
+inspection.
+
+`make bootstrap` runs the same qualification gate again before admitting the
+expensive `libgcc --check` campaign. Native Linux isolation normally needs
+privilege. Keep `make` itself under the calling user and let the harness elevate
+only the `pkgctl` process:
 
 ```sh
 make bootstrap BOOTSTRAP_PRIVILEGE=sudo

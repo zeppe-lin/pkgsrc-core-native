@@ -267,11 +267,31 @@ command nonce. These are qualification identities only. They are not installed
 system truth and must not be reused as future rootfs deployment identities.
 
 The harness preflights the current external seed capabilities required by the
-three recipes, including the shell, compiler/C++ compiler, binutils inspection,
-GNU make, Python, ordinary POSIX/GNU build utilities, and GMP/MPFR/MPC
-headers. This inventory is intentionally visible: later native package
-authority should make entries disappear from the seed requirement rather than
-silently inheriting them forever.
+three recipes, including the exact `/bin/sh` coordinate, compiler/C++ compiler,
+binutils inspection, GNU make, Python, ordinary POSIX/GNU build utilities,
+Bison/Flex, and GMP/MPFR/MPC development headers. This inventory is
+intentionally visible: later native package authority should make entries
+disappear from the seed requirement rather than silently inheriting them
+forever.
+
+File existence is not executable authority. After initialization, the seed
+runtime is qualified by a separate checked `seed-probe` transaction admitted
+through the same `pkgctl` construction/check path as the real campaign. It
+executes the shell and build utilities inside the isolated root, compiles and
+runs C and C++14 programs, links and executes against GMP/MPFR/MPC, exercises
+Bison/Flex and Python, consumes the private `/dev/null` and writable temporary
+roots, and repeats the final-check `sha256sum`/`awk`/`readelf` closure. The probe
+is staged from the recorded committed fixture, has no source/acquisition
+authority, and uses separate qualification identities and durable stores. A
+failure retains that private evidence; success removes the qualification
+workspace. `bootstrap` runs this gate before admitting the expensive real
+campaign.
+
+The seed is also prevented from silently extending the current GCC bootstrap
+through optional host facilities that are not part of the admitted closure.
+The bounded `libgcc` configure invocation disables optional zstd integration
+and sets `MAKEINFO=missing`; these are recipe choices, not reconstructed seed
+package requirements.
 
 The build interpreter is an exact regular executable inside the supplied root
 view. `pkgctl` inspects and binds its bytes before execution; the interpreter's
