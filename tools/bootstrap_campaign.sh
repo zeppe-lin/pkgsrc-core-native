@@ -210,8 +210,7 @@ preflight_seed_root()
     build/source \
     build/work \
     build/package \
-    build/inputs/build \
-    build/inputs/check \
+    build/inputs \
     check/source \
     check/inputs \
     target; do

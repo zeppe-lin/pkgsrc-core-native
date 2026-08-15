@@ -53,6 +53,12 @@ grep -F 'set BOOTSTRAP_PRIVILEGE' "$harness" >/dev/null || \
   fail 'root-owned seed mountpoints cannot request narrow provisioning authority'
 grep -F '    dev \' "$harness" >/dev/null || \
   fail 'bootstrap root-view preflight does not provision the /dev overlay mountpoint'
+grep -F '    build/inputs \' "$harness" >/dev/null || \
+  fail 'bootstrap root-view preflight does not provision the phase-local build input root'
+if grep -F '    build/inputs/build \' "$harness" >/dev/null || \
+   grep -F '    build/inputs/check \' "$harness" >/dev/null; then
+  fail 'bootstrap root-view preflight retains obsolete construction scope children'
+fi
 if grep -F '    check/package \' "$harness" >/dev/null; then
   fail 'bootstrap root-view preflight retains obsolete /check/package mountpoint'
 fi

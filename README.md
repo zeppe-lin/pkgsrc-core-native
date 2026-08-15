@@ -132,7 +132,9 @@ make bootstrap-init \
 
 The extracted root may remain root-owned. `BOOTSTRAP_PRIVILEGE=sudo` is used only
 when the empty build/check/target mountpoint topology must be created; do not
-`chown -R` the seed root.
+`chown -R` the seed root. Construction package inputs use the phase-local
+`/build/inputs` mountpoint; the harness does not provision obsolete
+`/build/inputs/build` or `/build/inputs/check` scope children.
 
 Catalog acquisition does not point at the repository root. `bootstrap-init` and
 `bootstrap` derive `.bootstrap/collection` from the admitted Git commit, including

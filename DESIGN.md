@@ -28,9 +28,11 @@ that happen to be available while a recipe runs.
 ### Build and check inputs
 
 A direct build or check requirement names package input authority. The native
-build boundary exposes each admitted direct package input beneath
-`PKG_BUILD_INPUT_ROOT/<package>`; recipes must consume that package tree
-explicitly.
+build boundary defines `PKG_BUILD_INPUT_ROOT=/build/inputs` and exposes each
+admitted direct build input beneath `PKG_BUILD_INPUT_ROOT/<package>`; recipes
+must consume that package tree explicitly. The historical
+`/build/inputs/build` and `/build/inputs/check` children are not part of the
+native construction ABI.
 
 For example, a library input may be admitted with paths such as:
 

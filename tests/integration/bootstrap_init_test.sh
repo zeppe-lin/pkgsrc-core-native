@@ -51,13 +51,17 @@ PKGSTATE_INIT=pkgstate-init \
 
 for required in \
   dev \
-  build/source build/work build/package build/inputs/build build/inputs/check \
+  build/source build/work build/package build/inputs \
   check/source check/inputs target tmp; do
   [ -d "$seed/$required" ] || fail "init did not provision root-view mountpoint: /$required"
 done
 
 [ ! -e "$seed/dev/null" ] || \
   fail 'bootstrap harness fabricated /dev/null instead of leaving device realization to libpkgexec-linux'
+[ ! -e "$seed/build/inputs/build" ] || \
+  fail 'bootstrap harness retained obsolete /build/inputs/build mountpoint'
+[ ! -e "$seed/build/inputs/check" ] || \
+  fail 'bootstrap harness retained obsolete /build/inputs/check mountpoint'
 [ ! -e "$seed/check/package" ] || \
   fail 'bootstrap harness retained obsolete /check/package mountpoint'
 [ -f "$work/.pkgsrc-core-native-bootstrap-v1" ] || \
