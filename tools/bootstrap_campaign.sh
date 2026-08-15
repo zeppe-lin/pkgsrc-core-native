@@ -217,6 +217,16 @@ ensure_seed_directory()
   return 0
 }
 
+require_empty_seed_input_namespace()
+{
+  relative=$1
+  path=$build_root/$relative
+  first=$(find "$path" -mindepth 1 -maxdepth 1 -print -quit) || \
+    fail "cannot inspect seed-root input namespace: $path"
+  [ -z "$first" ] || \
+    fail "seed-root input namespace must be empty: $path; found ${first#"$build_root/"}"
+}
+
 preflight_seed_root()
 {
   require_build_root
@@ -233,6 +243,9 @@ preflight_seed_root()
     ensure_seed_directory "$directory" 0755
   done
   ensure_seed_directory tmp 1777
+
+  require_empty_seed_input_namespace build/inputs
+  require_empty_seed_input_namespace check/inputs
 
   require_seed_executable /bin/sh
   for tool in \
@@ -676,6 +689,7 @@ resume_campaign()
   require_recorded_supervisor
   require_seed
   require_build_root
+  preflight_seed_root
 
   report=$reports/resume.out
   error=$reports/resume.err

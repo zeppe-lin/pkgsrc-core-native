@@ -136,7 +136,12 @@ when the empty build/check/target mountpoint topology must be created; do not
 `/build/inputs` mountpoint; check execution receives a separate empty
 `/check/package` subject mountpoint plus `/check/inputs` for dependencies. The
 harness does not provision obsolete `/build/inputs/build` or
-`/build/inputs/check` scope children.
+`/build/inputs/check` scope children. Both input namespaces must be empty before
+bootstrap authority is admitted or resumed. Reusing a seed root created by an
+older harness therefore fails closed if obsolete scope children or other residue
+remain; `bootstrap-clean` removes private `.bootstrap` state only and never
+cleans caller-supplied root-view bytes. Inspect and remove such residue
+deliberately before reinitializing.
 
 Catalog acquisition does not point at the repository root. `bootstrap-init` and
 `bootstrap` derive `.bootstrap/collection` from the admitted Git commit, including

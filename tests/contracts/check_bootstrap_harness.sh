@@ -59,6 +59,13 @@ if grep -F '    build/inputs/build \' "$harness" >/dev/null || \
    grep -F '    build/inputs/check \' "$harness" >/dev/null; then
   fail 'bootstrap root-view preflight retains obsolete construction scope children'
 fi
+grep -F 'require_empty_seed_input_namespace build/inputs' "$harness" >/dev/null || \
+  fail 'bootstrap preflight does not reject a polluted build input namespace'
+grep -F 'require_empty_seed_input_namespace check/inputs' "$harness" >/dev/null || \
+  fail 'bootstrap preflight does not reject a polluted check input namespace'
+awk '/^resume_campaign\(\)/,/^}/' "$harness" | \
+  grep -F 'preflight_seed_root' >/dev/null || \
+  fail 'bootstrap resume does not requalify the seed root before execution'
 grep -F '    check/package \' "$harness" >/dev/null || \
   fail 'bootstrap root-view preflight does not provision the checked-package mountpoint'
 grep -F 'require_seed_executable /bin/sh' "$harness" >/dev/null || \

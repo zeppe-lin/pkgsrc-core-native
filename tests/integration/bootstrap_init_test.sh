@@ -106,6 +106,28 @@ grep -Fx 'bootstrap seed runtime qualification: ok' "$temporary/qualify.out" >/d
   fail 'successful qualification retained private probe workspace'
 
 rm -rf "$work"
+mkdir "$seed/build/inputs/build"
+set +e
+BOOTSTRAP_WORK=$temporary/stale-input-work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" init >"$temporary/stale-input.out" 2>"$temporary/stale-input.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'nonempty /build/inputs namespace was admitted'
+grep -F 'seed-root input namespace must be empty:' \
+  "$temporary/stale-input.err" >/dev/null || \
+  fail 'nonempty /build/inputs failed outside input-namespace admission'
+grep -F 'build/inputs/build' "$temporary/stale-input.err" >/dev/null || \
+  fail 'nonempty /build/inputs diagnostic did not identify stale entry'
+[ ! -e "$temporary/stale-input-work/.pkgsrc-core-native-bootstrap-v1" ] || \
+  fail 'nonempty build input namespace created durable bootstrap authority'
+rmdir "$seed/build/inputs/build"
+
 rmdir "$seed/dev"
 mkdir "$temporary/outside-dev"
 ln -s "$temporary/outside-dev" "$seed/dev"

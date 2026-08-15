@@ -32,7 +32,11 @@ build boundary defines `PKG_BUILD_INPUT_ROOT=/build/inputs` and exposes each
 admitted direct build input beneath `PKG_BUILD_INPUT_ROOT/<package>`; recipes
 must consume that package tree explicitly. The historical
 `/build/inputs/build` and `/build/inputs/check` children are not part of the
-native construction ABI.
+native construction ABI. The caller-supplied `/build/inputs` and `/check/inputs`
+structural namespaces must be empty at admission and resume. The bootstrap
+harness rejects ambient children rather than deleting or interpreting them;
+root-view cleanup remains an explicit operator action outside retained package
+authority.
 
 For example, a library input may be admitted with paths such as:
 
