@@ -185,31 +185,34 @@ ensure_seed_directory()
   relative=$1
   mode=$2
   path=$build_root/$relative
-  if [ -d "$path" ]; then
-    return 0
+  if [ ! -d "$path" ]; then
+    if mkdir -p "$path" 2>/dev/null; then
+      chmod "$mode" "$path" || \
+        fail "cannot set seed-root mountpoint mode: $path"
+    else
+      [ -n "$privilege_bin" ] || \
+        fail "cannot provision seed-root mountpoint $path; set BOOTSTRAP_PRIVILEGE"
+      "$privilege_bin" install -d -m "$mode" -- "$path" || \
+        fail "cannot provision seed-root mountpoint with privilege: $path"
+    fi
   fi
-  if mkdir -p "$path" 2>/dev/null; then
-    chmod "$mode" "$path" || \
-      fail "cannot set seed-root mountpoint mode: $path"
-    return 0
-  fi
-  [ -n "$privilege_bin" ] || \
-    fail "cannot provision seed-root mountpoint $path; set BOOTSTRAP_PRIVILEGE"
-  "$privilege_bin" install -d -m "$mode" -- "$path" || \
-    fail "cannot provision seed-root mountpoint with privilege: $path"
+  canonical=$(realpath "$path" 2>/dev/null || :)
+  [ "$canonical" = "$path" ] || \
+    fail "seed-root mountpoint is not an exact symlink-free directory: $path"
+  return 0
 }
 
 preflight_seed_root()
 {
   require_build_root
   for directory in \
+    dev \
     build/source \
     build/work \
     build/package \
     build/inputs/build \
     build/inputs/check \
     check/source \
-    check/package \
     check/inputs \
     target; do
     ensure_seed_directory "$directory" 0755

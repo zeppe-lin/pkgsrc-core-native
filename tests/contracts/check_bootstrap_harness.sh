@@ -51,6 +51,11 @@ grep -F '"$privilege_bin" "$env_bin"' "$harness" >/dev/null || \
   fail 'privileged controller execution does not establish environment after privilege entry'
 grep -F 'set BOOTSTRAP_PRIVILEGE' "$harness" >/dev/null || \
   fail 'root-owned seed mountpoints cannot request narrow provisioning authority'
+grep -F '    dev \' "$harness" >/dev/null || \
+  fail 'bootstrap root-view preflight does not provision the /dev overlay mountpoint'
+if grep -F '    check/package \' "$harness" >/dev/null; then
+  fail 'bootstrap root-view preflight retains obsolete /check/package mountpoint'
+fi
 if grep -F '"$privilege_bin" "$pkgctl_bin"' "$harness" >/dev/null; then
   fail 'privileged pkgctl bypasses private toolchain environment reconstruction'
 fi
