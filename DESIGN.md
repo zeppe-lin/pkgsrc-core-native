@@ -232,8 +232,9 @@ linux-api-headers -> glibc-bootstrap -> libgcc
 ```
 
 and admits the real `libgcc` package check after construction. The check receives
-only its independently materialized source tree and sealed package image through
-the native check root; it does not reuse the construction workspace.
+the exact retained verified source-object tree and sealed package image through
+the native check root. Archive extraction remains construction-workspace
+authority; the check does not reuse or reconstruct that workspace.
 
 The harness never runs recipe programs directly and never loops over package
 names to construct them independently. Source acquisition, package-input

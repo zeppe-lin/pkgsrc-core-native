@@ -87,19 +87,33 @@ check:
   script: |
     set -eu
 
-    # Check authority receives the independently materialized source tree and
-    # the sealed package image. It does not reuse the build workspace.
-    test -f "$ZEPPE_LIN_CHECK_SOURCE/gcc-16.1.0/COPYING3"
-    runtime="$ZEPPE_LIN_CHECK_ROOT/usr/lib/libgcc_s.so.1"
-    test -f "$runtime"
-
-    dynamic=$(readelf -d "$runtime")
-    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgcc_s.so.1]' >/dev/null
-    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null
-    printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null
-    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
-      printf '%s\n' 'libgcc: checked runtime carries a build-time search path' >&2
+    fail()
+    {
+      printf '%s\n' "libgcc check: $*" >&2
       exit 1
+    }
+
+    # Check authority receives the exact retained verified source-object tree
+    # and sealed package image. Archive realization stays private to the build
+    # workspace and is not reconstructed by the check adapter.
+    source_archive="$ZEPPE_LIN_CHECK_SOURCE/gcc-16.1.0.tar.xz"
+    [ -f "$source_archive" ] || fail 'retained GCC source archive is absent'
+    [ "$(sha256sum "$source_archive" | awk '{print $1}')" = \
+      50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79 ] || \
+      fail 'retained GCC source archive digest differs from admitted source'
+
+    runtime="$ZEPPE_LIN_CHECK_ROOT/usr/lib/libgcc_s.so.1"
+    [ -f "$runtime" ] || fail 'sealed libgcc runtime is absent'
+
+    dynamic=$(readelf -d "$runtime") || fail 'readelf rejected sealed libgcc runtime'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgcc_s.so.1]' >/dev/null || \
+      fail 'sealed libgcc runtime lacks libgcc_s.so.1 SONAME'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null || \
+      fail 'sealed libgcc runtime lacks libc.so.6 dependency'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null || \
+      fail 'sealed libgcc runtime lacks final dynamic-loader dependency'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'sealed libgcc runtime carries a build-time search path'
     fi
 architectures:
   build: [x86_64]
