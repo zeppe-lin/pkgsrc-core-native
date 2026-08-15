@@ -12,8 +12,8 @@ for target in bootstrap-init bootstrap bootstrap-resume bootstrap-check bootstra
   grep -F "$target:" "$makefile" >/dev/null || fail "Makefile lacks $target"
 done
 
-grep -F 'set -- build libgcc ' "$harness" >/dev/null || \
-  fail 'bootstrap start is not one pkgctl build libgcc campaign'
+grep -F 'set -- build libgcc --check ' "$harness" >/dev/null || \
+  fail 'bootstrap start is not one checked pkgctl build libgcc campaign'
 grep -F -- '--collection "core-native=$collection_projection"' "$harness" >/dev/null || \
   fail 'bootstrap does not bind the committed collection projection'
 grep -F 'stage_collection_projection "$recorded_collection_commit"' "$harness" >/dev/null || \
@@ -60,13 +60,15 @@ grep -F "BOOTSTRAP_BUILD_ROOT must be a disposable root view, not the live /" "$
   fail 'bootstrap permits the live host root as qualification authority'
 grep -F 'expected exactly 3' "$harness" >/dev/null || \
   fail 'bootstrap result does not require the exact three-artifact construction closure'
+grep -F "'goal=build=libgcc,check=libgcc'" "$harness" >/dev/null || \
+  fail 'bootstrap workspace does not report its explicit libgcc check goal'
 
 if grep -E '(^|[[:space:]])(\./)?(linux-api-headers|glibc-bootstrap|libgcc)/recipe\.yml' "$harness" >/dev/null; then
   fail 'bootstrap harness reaches into recipe bodies instead of pkgctl authority'
 fi
 grep -F 'ls-tree -d --name-only "$commit"' "$harness" >/dev/null || \
   fail 'collection projection does not enumerate committed top-level directories'
-start_count=$(grep -Fc 'set -- build libgcc ' "$harness")
+start_count=$(grep -Fc 'set -- build libgcc --check ' "$harness")
 [ "$start_count" -eq 1 ] || \
   fail 'bootstrap harness must contain exactly one package-build start'
 if grep -F 'pkgctl run' "$harness" >/dev/null; then

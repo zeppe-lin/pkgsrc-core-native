@@ -512,7 +512,7 @@ start_campaign()
   error=$reports/start.err
   interpreter=$(resolve_interpreter)
 
-  set -- build libgcc \
+  set -- build libgcc --check \
     --canonical-store "$state" \
     --collection "core-native=$collection_projection" \
     --build-architecture x86_64 \
@@ -727,7 +727,7 @@ MARKER
     "supervisor-group-id=$supervisor_gid" \
     "supervisor-groups=$supervisor_groups" \
     "nonce=$(command_nonce)" \
-    'goal=build=libgcc'
+    'goal=build=libgcc,check=libgcc'
 }
 
 clean_campaign()

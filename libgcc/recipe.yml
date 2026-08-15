@@ -82,6 +82,25 @@ build:
       printf '%s\n' 'libgcc: runtime carries a build-time search path' >&2
       exit 1
     fi
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    # Check authority receives the independently materialized source tree and
+    # the sealed package image. It does not reuse the build workspace.
+    test -f "$ZEPPE_LIN_CHECK_SOURCE/gcc-16.1.0/COPYING3"
+    runtime="$ZEPPE_LIN_CHECK_ROOT/usr/lib/libgcc_s.so.1"
+    test -f "$runtime"
+
+    dynamic=$(readelf -d "$runtime")
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgcc_s.so.1]' >/dev/null
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      printf '%s\n' 'libgcc: checked runtime carries a build-time search path' >&2
+      exit 1
+    fi
 architectures:
   build: [x86_64]
   target: [x86_64]

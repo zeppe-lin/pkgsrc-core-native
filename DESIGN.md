@@ -224,12 +224,16 @@ runtime edges.
 
 The repository carries a thin qualification harness for the first native
 construction closure. It is not another recipe executor or dependency solver.
-`make bootstrap` admits exactly one `pkgctl build libgcc` command; the native
-resolver discovers the build closure:
+`make bootstrap` admits exactly one `pkgctl build libgcc --check` command. The
+native resolver discovers the construction closure:
 
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
 ```
+
+and admits the real `libgcc` package check after construction. The check receives
+only its independently materialized source tree and sealed package image through
+the native check root; it does not reuse the construction workspace.
 
 The harness never runs recipe programs directly and never loops over package
 names to construct them independently. Source acquisition, package-input
@@ -309,8 +313,8 @@ turning the harness into an implicit retry loop.
 
 ### Artifact qualification
 
-`bootstrap-check` requires a terminal successful build frontend result and
-exactly three published artifacts: `linux-api-headers`, `glibc-bootstrap`, and
+`bootstrap-check` requires a terminal successful checked build frontend result
+and exactly three published artifacts: `linux-api-headers`, `glibc-bootstrap`, and
 `libgcc`. It independently verifies the retained artifact SHA-256 values and
 key archive members, then checks the extracted `libgcc_s.so.1` SONAME, final
 `libc.so.6` and `ld-linux-x86-64.so.2` dependencies, and absence of

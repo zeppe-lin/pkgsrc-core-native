@@ -94,12 +94,17 @@ them. In particular, `filesystem` carries no `fstab`, `passwd`, `group`,
 
 ## Bootstrap qualification
 
-The first native construction closure can be exercised through the repository
-Makefile without bypassing `pkgctl`:
+The first native construction closure and a real package check can be exercised
+through the repository Makefile without bypassing `pkgctl`:
 
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
 ```
+
+The public campaign is `pkgctl build libgcc --check`: after the three real
+archive-backed constructions, the native check path reopens the independently
+materialized GCC source tree and sealed `libgcc` package image and verifies the
+final ELF runtime ABI.
 
 Prepare a **disposable extraction** of a known construction root. For
 the first cross-host qualification, use the same Zeppe-Lin 1.x rootfs archive
@@ -191,8 +196,9 @@ make bootstrap-check
 cat .bootstrap/bootstrap.manifest
 ```
 
-`bootstrap-check` requires exactly the three expected artifacts and independently
-checks their retained hashes plus the final `libgcc_s.so.1` ELF runtime closure.
+`bootstrap-check` requires a terminal successful checked campaign, exactly the
+three expected artifacts, and independently checks their retained hashes plus the
+final `libgcc_s.so.1` ELF runtime closure.
 For the first reproducibility experiment, run the same collection commit and
 same seed rootfs archive once on the current Zeppe-Lin machine and once on the
 Ubuntu machine, then compare the two `bootstrap.manifest` files byte for byte.
