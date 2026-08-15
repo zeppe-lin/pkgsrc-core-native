@@ -212,6 +212,7 @@ preflight_seed_root()
     build/package \
     build/inputs \
     check/source \
+    check/package \
     check/inputs \
     target; do
     ensure_seed_directory "$directory" 0755

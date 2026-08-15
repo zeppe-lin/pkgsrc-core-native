@@ -93,8 +93,10 @@ escaping paths, special objects, and colliding entries therefore never become
 ambient construction authority.
 
 Check programs consume the same source-object meaning through `PKG_SOURCE_ROOT`
-and the sealed checked package through `PKG_PACKAGE_ROOT`. Check execution does
-not receive a phase-specific alias for an unpacked construction workspace.
+and the sealed checked package through `PKG_PACKAGE_ROOT=/check/package`. The
+checked package is a distinct execution subject; `/check/inputs/<name>` contains
+check dependencies only. Check execution does not receive a phase-specific
+alias for an unpacked construction workspace.
 
 ## Bootstrap foundation
 

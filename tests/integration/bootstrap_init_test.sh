@@ -52,7 +52,7 @@ PKGSTATE_INIT=pkgstate-init \
 for required in \
   dev \
   build/source build/work build/package build/inputs \
-  check/source check/inputs target tmp; do
+  check/source check/package check/inputs target tmp; do
   [ -d "$seed/$required" ] || fail "init did not provision root-view mountpoint: /$required"
 done
 
@@ -62,8 +62,10 @@ done
   fail 'bootstrap harness retained obsolete /build/inputs/build mountpoint'
 [ ! -e "$seed/build/inputs/check" ] || \
   fail 'bootstrap harness retained obsolete /build/inputs/check mountpoint'
-[ ! -e "$seed/check/package" ] || \
-  fail 'bootstrap harness retained obsolete /check/package mountpoint'
+[ -d "$seed/check/package" ] || \
+  fail 'bootstrap harness did not provision /check/package mountpoint'
+[ -z "$(find "$seed/check/package" -mindepth 1 -maxdepth 1 -print -quit)" ] || \
+  fail 'bootstrap harness populated the checked-package structural mountpoint'
 [ -f "$work/.pkgsrc-core-native-bootstrap-v1" ] || \
   fail 'bootstrap init did not seal workspace authority'
 

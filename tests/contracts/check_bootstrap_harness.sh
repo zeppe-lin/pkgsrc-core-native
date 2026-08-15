@@ -59,9 +59,8 @@ if grep -F '    build/inputs/build \' "$harness" >/dev/null || \
    grep -F '    build/inputs/check \' "$harness" >/dev/null; then
   fail 'bootstrap root-view preflight retains obsolete construction scope children'
 fi
-if grep -F '    check/package \' "$harness" >/dev/null; then
-  fail 'bootstrap root-view preflight retains obsolete /check/package mountpoint'
-fi
+grep -F '    check/package \' "$harness" >/dev/null || \
+  fail 'bootstrap root-view preflight does not provision the checked-package mountpoint'
 if grep -F '"$privilege_bin" "$pkgctl_bin"' "$harness" >/dev/null; then
   fail 'privileged pkgctl bypasses private toolchain environment reconstruction'
 fi
