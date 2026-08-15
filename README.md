@@ -103,9 +103,10 @@ linux-api-headers -> glibc-bootstrap -> libgcc
 
 The public campaign is `pkgctl build libgcc --check`: after the three real
 archive-backed constructions, the native check path reopens the exact retained
-verified GCC source object and sealed `libgcc` package image and verifies the
-final ELF runtime ABI. Archive extraction remains construction-workspace
-authority; check does not reconstruct the build workspace.
+verified GCC source object through `PKG_SOURCE_ROOT` and the sealed `libgcc`
+package image through `PKG_PACKAGE_ROOT`, then verifies the final ELF runtime
+ABI. Archive extraction remains construction-workspace authority; check does
+not reconstruct the build workspace.
 
 Prepare a **disposable extraction** of a known construction root. For
 the first cross-host qualification, use the same Zeppe-Lin 1.x rootfs archive

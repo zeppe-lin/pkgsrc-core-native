@@ -70,12 +70,15 @@ require_text "$recipe" 'Shared library: [libc.so.6]'
 require_text "$recipe" 'Shared library: [ld-linux-x86-64.so.2]'
 require_text "$recipe" '\((RPATH|RUNPATH)\)'
 require_text "$recipe" 'check:'
-require_text "$recipe" 'ZEPPE_LIN_CHECK_SOURCE/gcc-16.1.0.tar.xz'
-require_text "$recipe" 'ZEPPE_LIN_CHECK_ROOT/usr/lib/libgcc_s.so.1'
+require_text "$recipe" 'PKG_SOURCE_ROOT/gcc-16.1.0.tar.xz'
+require_text "$recipe" 'PKG_PACKAGE_ROOT/usr/lib/libgcc_s.so.1'
 require_text "$recipe" 'retained GCC source archive digest differs from admitted source'
 require_text "$recipe" 'sealed libgcc runtime is absent'
 require_text "$recipe" 'sealed libgcc runtime lacks libgcc_s.so.1 SONAME'
 require_text "$recipe" 'sealed libgcc runtime carries a build-time search path'
+if grep -F 'ZEPPE_LIN_CHECK_' "$recipe" >/dev/null; then
+    fail 'libgcc check retained branded execution variables'
+fi
 require_text "$recipe" 'build: [x86_64]'
 require_text "$recipe" 'target: [x86_64]'
 
