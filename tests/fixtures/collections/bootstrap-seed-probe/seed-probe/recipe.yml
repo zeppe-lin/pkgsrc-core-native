@@ -95,17 +95,19 @@ build:
     objdump -f conftest.o >/dev/null || fail 'objdump rejected compiler output'
     objcopy --only-keep-debug conftest.o conftest.debug || fail 'objcopy rejected compiler output'
     gcc conftest.c -o conftest
-    ./conftest | grep -Fx c-ok >/dev/null || fail 'seed C binary did not execute'
+    c_output=$(./conftest) || fail 'seed C binary did not execute'
+    [ "$c_output" = c-ok ] || fail 'seed C binary produced unexpected output'
     readelf -h conftest >/dev/null || fail 'readelf rejected seed C binary'
     cp conftest conftest.stripped
     strip conftest.stripped || fail 'strip rejected seed C binary'
 
     cat > conftest.cc <<'CXX'
     #include <iostream>
-    int main() { std::cout << "cxx-ok\\n"; return 0; }
+    int main() { std::cout << "cxx-ok\n"; return 0; }
     CXX
     g++ -std=c++14 conftest.cc -o conftest-cxx
-    ./conftest-cxx | grep -Fx cxx-ok >/dev/null || fail 'seed C++14 binary did not execute'
+    cxx_output=$(./conftest-cxx) || fail 'seed C++14 binary did not execute'
+    [ "$cxx_output" = cxx-ok ] || fail 'seed C++14 binary produced unexpected output'
 
     cat > multiprecision.cc <<'MPC'
     #include <gmp.h>
