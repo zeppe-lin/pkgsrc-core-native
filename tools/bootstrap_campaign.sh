@@ -815,7 +815,11 @@ check_campaign()
         ;;
       glibc)
         check_archive_member "$path" usr/include/gnu/stubs.h
+        check_archive_member "$path" usr/lib/crt1.o
+        check_archive_member "$path" usr/lib/crti.o
+        check_archive_member "$path" usr/lib/crtn.o
         check_archive_member "$path" usr/lib/libc.so.6
+        check_archive_member "$path" usr/lib/libc_nonshared.a
         check_archive_member "$path" usr/lib/ld-linux-x86-64.so.2
         ;;
       linux-api-headers)
@@ -884,12 +888,20 @@ check_campaign()
   probe_binary=$cohort/probe/usr/libexec/runtime-cohort-probe
   probe_dynamic=$("$readelf_bin" -d "$probe_binary") ||
     fail 'readelf rejected published runtime-cohort probe'
+  probe_needed_count=$(printf '%s\n' "$probe_dynamic" |
+    grep -c 'Shared library: \[' || true)
+  [ "$probe_needed_count" -eq 2 ] ||
+    fail 'published probe NEEDED cardinality differs from exact runtime cohort'
   printf '%s\n' "$probe_dynamic" |
     grep -F 'Shared library: [libgcc_s.so.1]' >/dev/null ||
     fail 'published probe does not require libgcc_s.so.1'
   printf '%s\n' "$probe_dynamic" |
     grep -F 'Shared library: [libc.so.6]' >/dev/null ||
     fail 'published probe does not require libc.so.6'
+  if printf '%s\n' "$probe_dynamic" |
+      grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null; then
+    fail 'published probe directly requires loader DSO instead of naming only PT_INTERP'
+  fi
   printf '%s\n' "$probe_dynamic" | grep -E 'Flags:.*NODEFLIB' >/dev/null ||
     fail 'published probe permits default runtime library search'
   if printf '%s\n' "$probe_dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then

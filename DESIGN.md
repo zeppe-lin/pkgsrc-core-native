@@ -251,12 +251,21 @@ filesystem + glibc + libgcc -> runtime-cohort-probe   (build + check)
 command. The runtime-cohort probe is qualification machinery, not public
 collection membership: the harness stages its committed fixture bytes only into
 the private admitted collection projection. BUILD consumes the exact
-`filesystem`, final `glibc`, and `libgcc` package inputs and executes a tiny
-unwind probe with the package-owned glibc loader and only the two final runtime
-library trees. CHECK reconstructs those three inputs and the sealed probe image
-independently and repeats the execution. Reciprocal runtime authority is thereby
-exercised without turning runtime cohort membership into cyclic construction
-precedence or borrowing final runtime bytes from the seed root.
+`filesystem`, final `glibc`, and `libgcc` package inputs. The seed GCC frontend
+is admitted only as compiler-tool authority: `-nostdinc` suppresses its system
+header closure, final glibc headers are named explicitly, and a direct seed
+`ld` invocation consumes only package-owned glibc startup objects/libraries and
+the exact libgcc runtime while using the package-owned loader under
+`--as-needed` to satisfy glibc-private link references and explicitly naming
+`/lib64/ld-linux-x86-64.so.2` as PT_INTERP. The loader must not become a
+DT_NEEDED entry. The resulting executable has exactly the final libc/libgcc
+NEEDED set, `NODEFLIB`, and no RPATH/RUNPATH. It then executes with the package-owned
+glibc loader, cache inhibited, and only the two final runtime library trees.
+CHECK reconstructs those three inputs and the sealed probe image independently,
+revalidates the ELF contract, and repeats execution. Reciprocal runtime
+authority is thereby exercised without turning runtime cohort membership into
+cyclic construction precedence or borrowing final headers/startfiles/runtime
+bytes from the seed root.
 
 The harness never runs recipe programs directly and never loops over package
 names to construct them independently. Source acquisition, package-input
@@ -363,12 +372,15 @@ turning the harness into an implicit retry loop.
 and exactly six published artifacts: `filesystem`, final `glibc`,
 `glibc-bootstrap`, `libgcc`, `linux-api-headers`, and the private
 `runtime-cohort-probe`. It independently verifies retained artifact SHA-256
-values and key archive members, checks the extracted `libgcc_s.so.1` SONAME,
-final `libc.so.6` and `ld-linux-x86-64.so.2` dependencies, and absence of
-RPATH/RUNPATH. It then reconstructs the published filesystem/glibc/libgcc/probe
-artifacts, verifies the filesystem loader aliases, and runs the sealed probe
-through the published final glibc loader with only the published glibc/libgcc
-library trees in its explicit search path.
+values and key archive members, including the final glibc startup/nonshared
+link objects, checks the extracted `libgcc_s.so.1` SONAME, final `libc.so.6`
+and `ld-linux-x86-64.so.2` dependencies, and absence of RPATH/RUNPATH. It then
+reconstructs the published filesystem/glibc/libgcc/probe artifacts, verifies
+the filesystem loader aliases, requires the sealed probe to retain exactly the
+`libc.so.6` + `libgcc_s.so.1` NEEDED set, the x86_64 PT_INTERP, `NODEFLIB`, and
+no RPATH/RUNPATH, and runs it through the published final glibc loader with the
+cache inhibited and only the published glibc/libgcc library trees in its
+explicit search path.
 
 The command emits `BOOTSTRAP_WORK/bootstrap.manifest`, a path-independent
 manifest containing the seed digest, admitted collection commit, and each

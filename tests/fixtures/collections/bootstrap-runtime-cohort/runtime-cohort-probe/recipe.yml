@@ -84,12 +84,52 @@ build:
     }
     C
 
-    gcc cohort.c -Wl,--no-as-needed -lgcc_s -Wl,--as-needed -Wl,-z,nodefaultlib -o cohort-probe
+    for path in \
+      "$libc/usr/include/stdio.h" \
+      "$libc/usr/lib/crt1.o" \
+      "$libc/usr/lib/crti.o" \
+      "$libc/usr/lib/crtn.o" \
+      "$libc/usr/lib/libc.so.6" \
+      "$libc/usr/lib/libc_nonshared.a"; do
+      [ -f "$path" ] || fail "glibc link authority is absent: ${path#"$libc/"}"
+    done
+
+    gcc_include=$(gcc -print-file-name=include)
+    [ -d "$gcc_include" ] || fail 'seed GCC internal include directory is absent'
+    gcc \
+      -fno-pie \
+      -fno-stack-protector \
+      -nostdinc \
+      -isystem "$gcc_include" \
+      -isystem "$libc/usr/include" \
+      -c cohort.c \
+      -o cohort.o
+
+    ld \
+      -o cohort-probe \
+      --dynamic-linker /lib64/ld-linux-x86-64.so.2 \
+      -z nodefaultlib \
+      "$libc/usr/lib/crt1.o" \
+      "$libc/usr/lib/crti.o" \
+      cohort.o \
+      "$libgcc/usr/lib/libgcc_s.so.1" \
+      "$libc/usr/lib/libc.so.6" \
+      "$libc/usr/lib/libc_nonshared.a" \
+      --as-needed \
+      "$libc/usr/lib/ld-linux-x86-64.so.2" \
+      --no-as-needed \
+      "$libc/usr/lib/crtn.o"
+
     dynamic=$(readelf -d cohort-probe) || fail 'readelf rejected cohort probe'
+    needed_count=$(printf '%s\n' "$dynamic" | grep -c 'Shared library: \[' || true)
+    [ "$needed_count" -eq 2 ] || fail 'probe NEEDED cardinality differs from exact runtime cohort'
     printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgcc_s.so.1]' >/dev/null || \
       fail 'probe does not require libgcc_s.so.1'
     printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null || \
       fail 'probe does not require libc.so.6'
+    if printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null; then
+      fail 'probe directly requires loader DSO instead of naming only PT_INTERP'
+    fi
     printf '%s\n' "$dynamic" | grep -E 'Flags:.*NODEFLIB' >/dev/null || \
       fail 'probe permits default runtime library search'
     interpreter=$(readelf -l cohort-probe | sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p')
@@ -133,6 +173,25 @@ check:
     [ -x "$libc/usr/lib/ld-linux-x86-64.so.2" ] || fail 'reconstructed glibc loader is absent'
     [ -f "$libgcc/usr/lib/libgcc_s.so.1" ] || fail 'reconstructed libgcc runtime is absent'
     [ -x "$probe" ] || fail 'sealed runtime cohort probe is absent'
+
+    dynamic=$(readelf -d "$probe") || fail 'readelf rejected sealed runtime cohort probe'
+    needed_count=$(printf '%s\n' "$dynamic" | grep -c 'Shared library: \[' || true)
+    [ "$needed_count" -eq 2 ] || fail 'sealed probe NEEDED cardinality differs from exact runtime cohort'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgcc_s.so.1]' >/dev/null || \
+      fail 'sealed probe does not require libgcc_s.so.1'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null || \
+      fail 'sealed probe does not require libc.so.6'
+    if printf '%s\n' "$dynamic" | grep -F 'Shared library: [ld-linux-x86-64.so.2]' >/dev/null; then
+      fail 'sealed probe directly requires loader DSO instead of naming only PT_INTERP'
+    fi
+    printf '%s\n' "$dynamic" | grep -E 'Flags:.*NODEFLIB' >/dev/null || \
+      fail 'sealed probe permits default runtime library search'
+    interpreter=$(readelf -l "$probe" | sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p')
+    [ "$interpreter" = /lib64/ld-linux-x86-64.so.2 ] || \
+      fail 'sealed probe names the wrong interpreter ABI'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'sealed probe carries RPATH/RUNPATH'
+    fi
 
     old_ifs=$IFS
     IFS=:

@@ -110,12 +110,19 @@ The admitted command is `pkgctl build runtime-cohort-probe --check`. The
 private `runtime-cohort-probe` is committed test/qualification machinery and is
 injected only into the recorded `.bootstrap/collection` projection; it is not
 public collection membership. Its build consumes exact `filesystem`, final
-`glibc`, and `libgcc` package inputs, links a tiny unwind executable, and runs
-that executable through the package-owned final glibc loader with a library
-path containing only the exact glibc/libgcc package trees. CHECK reconstructs
-the same three inputs independently and executes the sealed probe again. This
-attacks runtime-cohort resolution, build/check package-input projection, final
-loader/library compatibility, restart reconstruction, and package-tree
+`glibc`, and `libgcc` package inputs. The seed GCC frontend remains tool
+authority only: compilation suppresses seed system headers and admits final
+`glibc` headers explicitly, then the seed `ld` links explicit package-owned
+`crt1.o`/`crti.o`/`crtn.o`, `libc.so.6`, `libc_nonshared.a`, the
+package-owned loader under `--as-needed`, and `libgcc_s.so.1`, while naming
+the filesystem-owned x86_64 interpreter ABI.
+The resulting unwind executable permits neither default-library search nor a
+construction RPATH/RUNPATH and is run through the package-owned final glibc
+loader with a library path containing only the exact glibc/libgcc package
+trees. CHECK reconstructs the same three inputs independently, revalidates the
+sealed ELF contract, and executes the probe again. This attacks runtime-cohort
+resolution, build/check package-input projection, compile/link authority,
+final loader/library compatibility, restart reconstruction, and package-tree
 separation without pretending the seed root is final runtime authority.
 
 Prepare a **disposable extraction** of a known construction root. For
