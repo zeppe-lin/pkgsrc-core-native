@@ -24,7 +24,12 @@ pkgctl_requested=${PKGCTL:-pkgctl}
 pkgstate_init_requested=${PKGSTATE_INIT:-pkgstate-init}
 privilege_requested=${BOOTSTRAP_PRIVILEGE:-}
 max_steps=${BOOTSTRAP_MAX_STEPS:-8}
-source_date_epoch=${BOOTSTRAP_SOURCE_DATE_EPOCH:-0}
+build_parallelism_requested=${BOOTSTRAP_JOBS:-}
+source_date_epoch_requested=${BOOTSTRAP_SOURCE_DATE_EPOCH:-}
+build_parallelism=
+source_date_epoch=
+build_file_creation_mask=0022
+build_output_layout=package-root
 
 fail()
 {
@@ -217,6 +222,26 @@ ensure_seed_directory()
   return 0
 }
 
+admit_requested_build_policy()
+{
+  build_parallelism=${build_parallelism_requested:-4}
+  source_date_epoch=${source_date_epoch_requested:-0}
+  require_uint "$build_parallelism" BOOTSTRAP_JOBS
+  [ "$build_parallelism" -gt 0 ] || fail 'BOOTSTRAP_JOBS must be positive'
+  require_build_policy
+}
+
+require_build_policy()
+{
+  require_uint "$build_parallelism" admitted-build-parallelism
+  [ "$build_parallelism" -gt 0 ] || fail 'admitted build parallelism must be positive'
+  require_uint "$source_date_epoch" admitted-build-source-date-epoch
+  [ "$build_file_creation_mask" = 0022 ] || \
+    fail 'bootstrap workspace build file-creation mask differs from house policy'
+  [ "$build_output_layout" = package-root ] || \
+    fail 'bootstrap workspace output layout differs from package-root policy'
+}
+
 require_empty_seed_input_namespace()
 {
   relative=$1
@@ -261,7 +286,7 @@ preflight_seed_root()
   resolve_interpreter >/dev/null
   require_uint "$max_steps" BOOTSTRAP_MAX_STEPS
   [ "$max_steps" -gt 0 ] || fail 'BOOTSTRAP_MAX_STEPS must be positive'
-  require_uint "$source_date_epoch" BOOTSTRAP_SOURCE_DATE_EPOCH
+  require_build_policy
 }
 
 marker=$work/.pkgsrc-core-native-bootstrap-v1
@@ -382,6 +407,10 @@ load_marker_authority()
   recorded_supervisor_uid=$(sed -n 's/^supervisor-user-id=//p' "$marker")
   recorded_supervisor_gid=$(sed -n 's/^supervisor-group-id=//p' "$marker")
   recorded_supervisor_groups=$(sed -n 's/^supervisor-groups=//p' "$marker")
+  recorded_build_parallelism=$(sed -n 's/^build-policy-parallelism=//p' "$marker")
+  recorded_build_file_creation_mask=$(sed -n 's/^build-policy-file-creation-mask=//p' "$marker")
+  recorded_source_date_epoch=$(sed -n 's/^build-policy-source-date-epoch=//p' "$marker")
+  recorded_build_output_layout=$(sed -n 's/^build-policy-output-layout=//p' "$marker")
   recorded_nonce=$(sed -n 's/^nonce=//p' "$marker")
   [ -n "$recorded_nonce" ] || \
     fail 'bootstrap workspace lacks command-goal authority; clean and reinitialize'
@@ -392,6 +421,28 @@ load_marker_authority()
   [ -n "$recorded_supervisor_uid" ] && [ -n "$recorded_supervisor_gid" ] && \
     [ -n "$recorded_supervisor_groups" ] || \
     fail 'bootstrap workspace lacks native supervisor credential authority; clean and reinitialize'
+  [ -n "$recorded_build_parallelism" ] && \
+    [ -n "$recorded_build_file_creation_mask" ] && \
+    [ -n "$recorded_source_date_epoch" ] && \
+    [ -n "$recorded_build_output_layout" ] || \
+    fail 'bootstrap workspace lacks complete build policy authority; clean and reinitialize'
+  [ "$recorded_build_file_creation_mask" = 0022 ] || \
+    fail 'bootstrap workspace build file-creation mask differs from house policy; clean and reinitialize'
+  [ "$recorded_build_output_layout" = package-root ] || \
+    fail 'bootstrap workspace output layout differs from package-root policy; clean and reinitialize'
+  if [ -n "$build_parallelism_requested" ]; then
+    [ "$recorded_build_parallelism" = "$build_parallelism_requested" ] || \
+      fail 'BOOTSTRAP_JOBS differs from initialized workspace build policy authority'
+  fi
+  if [ -n "$source_date_epoch_requested" ]; then
+    [ "$recorded_source_date_epoch" = "$source_date_epoch_requested" ] || \
+      fail 'BOOTSTRAP_SOURCE_DATE_EPOCH differs from initialized workspace build policy authority'
+  fi
+  build_parallelism=$recorded_build_parallelism
+  source_date_epoch=$recorded_source_date_epoch
+  build_file_creation_mask=$recorded_build_file_creation_mask
+  build_output_layout=$recorded_build_output_layout
+  require_build_policy
   if [ -n "$toolchain_prefix" ]; then
     [ "$recorded_toolchain_prefix" = "$toolchain_prefix" ] || \
       fail 'BOOTSTRAP_TOOLCHAIN_PREFIX differs from initialized workspace authority'
@@ -634,7 +685,8 @@ qualify_seed_runtime()
     --interpreter "$interpreter" \
     --build-user-id "$supervisor_uid" \
     --build-group-id "$supervisor_gid" \
-    --source-date-epoch "$source_date_epoch" \
+    --build-parallelism "$build_parallelism" \
+    --build-source-date-epoch "$source_date_epoch" \
     --max-steps 2
   # shellcheck disable=SC2046
   set -- "$@" $(qualification_binding_arguments)
@@ -693,7 +745,8 @@ start_campaign()
     --interpreter "$interpreter" \
     --build-user-id "$supervisor_uid" \
     --build-group-id "$supervisor_gid" \
-    --source-date-epoch "$source_date_epoch" \
+    --build-parallelism "$build_parallelism" \
+    --build-source-date-epoch "$source_date_epoch" \
     --max-steps "$max_steps"
   # shellcheck disable=SC2046
   set -- "$@" $(binding_arguments)
@@ -722,7 +775,6 @@ resume_campaign()
     --interpreter "$interpreter" \
     --build-user-id "$supervisor_uid" \
     --build-group-id "$supervisor_gid" \
-    --source-date-epoch "$source_date_epoch" \
     --max-steps "$max_steps"
   append_groups_and_run "$report" "$error" "$@"
 }
@@ -784,6 +836,13 @@ check_campaign()
   printf 'seed-sha256 %s\n' "$seed_sha256" >>"$manifest.tmp"
   printf 'collection-commit %s\n' \
     "$recorded_collection_commit" >>"$manifest.tmp"
+  printf 'build-policy-parallelism %s\n' "$build_parallelism" >>"$manifest.tmp"
+  printf 'build-policy-file-creation-mask %s\n' \
+    "$build_file_creation_mask" >>"$manifest.tmp"
+  printf 'build-policy-source-date-epoch %s\n' \
+    "$source_date_epoch" >>"$manifest.tmp"
+  printf 'build-policy-output-layout %s\n' \
+    "$build_output_layout" >>"$manifest.tmp"
 
   for package in filesystem glibc glibc-bootstrap libgcc linux-api-headers runtime-cohort-probe; do
     index=$(artifact_index "$package")
@@ -938,6 +997,7 @@ init_campaign()
   admitted_collection_commit=$(collection_commit)
   resolve_controller_tools
   resolve_supervisor_credentials
+  admit_requested_build_policy
   preflight_seed_root
   interpreter=$(resolve_interpreter)
 
@@ -964,6 +1024,10 @@ toolchain-prefix=$toolchain_prefix
 supervisor-user-id=$supervisor_uid
 supervisor-group-id=$supervisor_gid
 supervisor-groups=$supervisor_groups
+build-policy-parallelism=$build_parallelism
+build-policy-file-creation-mask=$build_file_creation_mask
+build-policy-source-date-epoch=$source_date_epoch
+build-policy-output-layout=$build_output_layout
 nonce=$(command_nonce)
 MARKER
 
@@ -978,6 +1042,10 @@ MARKER
     "supervisor-user-id=$supervisor_uid" \
     "supervisor-group-id=$supervisor_gid" \
     "supervisor-groups=$supervisor_groups" \
+    "build-policy-parallelism=$build_parallelism" \
+    "build-policy-file-creation-mask=$build_file_creation_mask" \
+    "build-policy-source-date-epoch=$source_date_epoch" \
+    "build-policy-output-layout=$build_output_layout" \
     "nonce=$(command_nonce)" \
     'goal=build=runtime-cohort-probe,check=runtime-cohort-probe'
 }

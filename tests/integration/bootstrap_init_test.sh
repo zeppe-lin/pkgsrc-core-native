@@ -42,6 +42,8 @@ SCRIPT
 chmod 0755 "$toolchain/bin/pkgstate-init"
 
 seed_sha=$(printf 'bootstrap-init-fixture' | sha256sum | awk '{print $1}')
+BOOTSTRAP_JOBS=3 \
+BOOTSTRAP_SOURCE_DATE_EPOCH=123456789 \
 BOOTSTRAP_WORK=$work \
 BOOTSTRAP_BUILD_ROOT=$seed \
 BOOTSTRAP_SEED_SHA256=$seed_sha \
@@ -73,6 +75,14 @@ done
 
 grep -Fx "build-root=$seed" "$work/.pkgsrc-core-native-bootstrap-v1" >/dev/null || \
   fail 'bootstrap workspace did not retain exact hostile-minimal root authority'
+for expected in \
+  'build-policy-parallelism=3' \
+  'build-policy-file-creation-mask=0022' \
+  'build-policy-source-date-epoch=123456789' \
+  'build-policy-output-layout=package-root'; do
+  grep -Fx "$expected" "$work/.pkgsrc-core-native-bootstrap-v1" >/dev/null || \
+    fail "bootstrap workspace omitted admitted policy field: $expected"
+done
 
 cat >"$toolchain/bin/pkgctl" <<'SCRIPT'
 #!/bin/sh
@@ -100,6 +110,10 @@ grep -Fx -- '--check' "$temporary/qualify.args" >/dev/null || \
   fail 'qualification did not request seed-probe check'
 grep -F 'bootstrap-seed-probe=' "$temporary/qualify.args" >/dev/null || \
   fail 'qualification did not bind committed seed-probe collection'
+[ "$(grep -A1 -Fx -- '--build-parallelism' "$temporary/qualify.args" | tail -1)" = 3 ] || \
+  fail 'qualification did not inherit admitted build parallelism'
+[ "$(grep -A1 -Fx -- '--build-source-date-epoch' "$temporary/qualify.args" | tail -1)" = 123456789 ] || \
+  fail 'qualification did not inherit admitted source-date epoch'
 grep -Fx 'bootstrap seed runtime qualification: ok' "$temporary/qualify.out" >/dev/null || \
   fail 'qualification did not report terminal success'
 [ ! -e "$work/qualification" ] || \
@@ -123,6 +137,78 @@ set -e
 grep -F 'bootstrap command goal differs from initialized workspace authority' \
   "$temporary/goal-drift.err" >/dev/null || \
   fail 'changed command-goal nonce failed outside marker authority admission'
+cp "$temporary/marker.good" "$work/.pkgsrc-core-native-bootstrap-v1"
+
+set +e
+BOOTSTRAP_JOBS=4 \
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" resume >"$temporary/jobs-drift.out" 2>"$temporary/jobs-drift.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'changed bootstrap parallelism was resumed'
+grep -F 'BOOTSTRAP_JOBS differs from initialized workspace build policy authority' \
+  "$temporary/jobs-drift.err" >/dev/null || \
+  fail 'parallelism drift failed outside build-policy admission'
+
+set +e
+BOOTSTRAP_SOURCE_DATE_EPOCH=123456790 \
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" resume >"$temporary/epoch-drift.out" 2>"$temporary/epoch-drift.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'changed bootstrap source-date epoch was resumed'
+grep -F 'BOOTSTRAP_SOURCE_DATE_EPOCH differs from initialized workspace build policy authority' \
+  "$temporary/epoch-drift.err" >/dev/null || \
+  fail 'source-date epoch drift failed outside build-policy admission'
+
+sed 's/^build-policy-file-creation-mask=.*/build-policy-file-creation-mask=0077/' \
+  "$temporary/marker.good" >"$work/.pkgsrc-core-native-bootstrap-v1"
+set +e
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" resume >"$temporary/mask-drift.out" 2>"$temporary/mask-drift.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'tampered bootstrap file-creation mask was resumed'
+grep -F 'build file-creation mask differs from house policy' \
+  "$temporary/mask-drift.err" >/dev/null || \
+  fail 'fixed file-creation mask drift failed outside policy admission'
+cp "$temporary/marker.good" "$work/.pkgsrc-core-native-bootstrap-v1"
+
+sed 's/^build-policy-output-layout=.*/build-policy-output-layout=other/' \
+  "$temporary/marker.good" >"$work/.pkgsrc-core-native-bootstrap-v1"
+set +e
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" resume >"$temporary/layout-drift.out" 2>"$temporary/layout-drift.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'tampered bootstrap output layout was resumed'
+grep -F 'output layout differs from package-root policy' \
+  "$temporary/layout-drift.err" >/dev/null || \
+  fail 'fixed output-layout drift failed outside policy admission'
 cp "$temporary/marker.good" "$work/.pkgsrc-core-native-bootstrap-v1"
 
 rm -rf "$work"

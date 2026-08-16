@@ -355,14 +355,20 @@ re-observe the tuple and fail closed on drift. The Makefile exposes no arbitrary
 `bootstrap-init` creates one empty provider-owned canonical state store using
 `pkgstate-init`, the private runtime hierarchy, and the public artifact root.
 It records the exact seed identity, build-root coordinate, interpreter, clean
-collection commit, and deterministic command-goal nonce in the local workspace
-marker. Start and resume require that nonce to match the current harness goal; a
-changed campaign definition therefore fails closed and requires explicit cleanup
-and reinitialization instead of attempting to reinterpret an old workspace.
+collection commit, deterministic command-goal nonce, and complete campaign build
+policy in the local workspace marker. The selectable admission dimensions are
+parallelism (`BOOTSTRAP_JOBS`, default 4) and source-date epoch
+(`BOOTSTRAP_SOURCE_DATE_EPOCH`, default 0); the harness fixes file-creation mask
+0022 and package-root output layout. Qualification and the main start pass this
+policy only to `pkgctl --start`. Start and resume require the marker policy and
+nonce to remain coherent; explicit parallelism/epoch drift and fixed mask/layout
+tampering fail closed.
 
-`bootstrap` starts one bounded command. `bootstrap-resume` carries no catalog,
-goal, architecture, or binding restatement; it uses `pkgctl build --resume`
-and the command evidence admitted at start. `BOOTSTRAP_MAX_STEPS` is a positive
+`bootstrap` starts one bounded command. `bootstrap-resume` carries no build
+policy, catalog, goal, architecture, or binding restatement; it uses `pkgctl
+build --resume` and the command evidence admitted at start. An omitted policy
+input on resume inherits the marker; a supplied value must equal admission.
+`BOOTSTRAP_MAX_STEPS` is a positive
 per-invocation execution bound and may be increased for a later resume without
 turning the harness into an implicit retry loop.
 

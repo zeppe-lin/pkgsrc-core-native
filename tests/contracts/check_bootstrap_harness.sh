@@ -26,14 +26,43 @@ grep -F -- '--build-architecture x86_64' "$harness" >/dev/null || \
   fail 'bootstrap build architecture is not explicit'
 grep -F -- '--target-architecture x86_64' "$harness" >/dev/null || \
   fail 'bootstrap target architecture is not explicit'
-grep -F -- '--source-date-epoch "$source_date_epoch"' "$harness" >/dev/null || \
-  fail 'bootstrap construction epoch is not explicit'
+for required in \
+  '--build-parallelism "$build_parallelism"' \
+  '--build-source-date-epoch "$source_date_epoch"'; do
+  grep -F -- "$required" "$harness" >/dev/null || \
+    fail "bootstrap start does not carry admitted build policy: $required"
+done
 grep -F -- '--max-steps "$max_steps"' "$harness" >/dev/null || \
   fail 'bootstrap execution bound is not explicit'
+if grep -F -- '--source-date-epoch' "$harness" >/dev/null; then
+  fail 'bootstrap harness retains scalar pre-policy source-date flag'
+fi
 grep -F 'pkgstate_init_bin' "$harness" >/dev/null || \
   fail 'bootstrap does not use provider-owned empty-state initialization'
 grep -F 'BOOTSTRAP_TOOLCHAIN_PREFIX' "$makefile" >/dev/null || \
   fail 'Makefile does not expose private toolchain authority'
+grep -F 'BOOTSTRAP_JOBS ?=' "$makefile" >/dev/null || \
+  fail 'Makefile does not expose bootstrap policy parallelism input'
+grep -F 'BOOTSTRAP_SOURCE_DATE_EPOCH ?=' "$makefile" >/dev/null || \
+  fail 'Makefile does not expose bootstrap policy epoch input'
+for required in \
+  'build-policy-parallelism=$build_parallelism' \
+  'build-policy-file-creation-mask=$build_file_creation_mask' \
+  'build-policy-source-date-epoch=$source_date_epoch' \
+  'build-policy-output-layout=$build_output_layout' \
+  'BOOTSTRAP_JOBS differs from initialized workspace build policy authority' \
+  'BOOTSTRAP_SOURCE_DATE_EPOCH differs from initialized workspace build policy authority' \
+  'build file-creation mask differs from house policy' \
+  'output layout differs from package-root policy'; do
+  grep -F -- "$required" "$harness" >/dev/null || \
+    fail "bootstrap build-policy authority contract omits: $required"
+done
+resume_block=$(sed -n '/^resume_campaign()/,/^}/p' "$harness")
+for forbidden in '--build-parallelism' '--build-source-date-epoch' '--source-date-epoch'; do
+  if printf '%s\n' "$resume_block" | grep -F -- "$forbidden" >/dev/null; then
+    fail "bootstrap resume redeclares admitted build policy: $forbidden"
+  fi
+done
 if grep -E 'BOOTSTRAP_BUILD_(UID|GID|GROUPS)' "$makefile" >/dev/null; then
   fail 'Makefile exposes caller-selected native supervisor credentials'
 fi

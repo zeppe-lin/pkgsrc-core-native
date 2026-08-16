@@ -143,9 +143,19 @@ tar -xpf "$seed_archive" -C "$seed_root"
 
 make bootstrap-init \
   BOOTSTRAP_PRIVILEGE=sudo \
+  BOOTSTRAP_JOBS=8 \
   BOOTSTRAP_BUILD_ROOT="$seed_root" \
   BOOTSTRAP_SEED_SHA256="$seed_sha256"
 ```
+
+`bootstrap-init` admits the campaign build policy once. `BOOTSTRAP_JOBS`
+selects operator resource parallelism (default 4 at admission) and
+`BOOTSTRAP_SOURCE_DATE_EPOCH` selects the reproducible epoch (default 0 at
+admission). The marker also seals the fixed house dimensions: file-creation mask
+0022 and package-root output layout. Qualification and start pass that complete
+policy to `pkgctl --start`; resume passes no policy options and recovers the
+retained value. Omitting the variables later therefore inherits the admitted
+policy, while explicitly changing either value is refused before execution.
 
 The extracted root may remain root-owned. `BOOTSTRAP_PRIVILEGE=sudo` is used only
 when the empty build/check/target mountpoint topology must be created; do not
@@ -242,10 +252,12 @@ continue the same retained command with:
 make bootstrap-resume BOOTSTRAP_PRIVILEGE=sudo
 ```
 
-The workspace marker binds the deterministic command-goal nonce. A repository
-update that changes the bounded bootstrap goal is not a resumable reinterpretation
-of old evidence: resume fails closed and requires `bootstrap-clean` followed by a
-new `bootstrap-init`.
+The workspace marker binds the deterministic command-goal nonce and the complete
+campaign build policy. A repository update that changes the bounded bootstrap
+goal, a caller attempt to change admitted parallelism/epoch, or marker bytes that
+contradict the fixed mask/layout are not resumable reinterpretations of old
+evidence: resume fails closed and requires deliberate correction or
+`bootstrap-clean` followed by a new `bootstrap-init`.
 
 After a terminal result:
 

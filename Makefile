@@ -8,13 +8,14 @@ BOOTSTRAP_INTERPRETER ?=
 BOOTSTRAP_TOOLCHAIN_PREFIX ?= $(NEW_TOOLCHAIN_PREFIX)
 BOOTSTRAP_PRIVILEGE ?=
 BOOTSTRAP_MAX_STEPS ?= 8
-BOOTSTRAP_SOURCE_DATE_EPOCH ?= 0
+BOOTSTRAP_JOBS ?=
+BOOTSTRAP_SOURCE_DATE_EPOCH ?=
 PKGCTL ?= pkgctl
 PKGSTATE_INIT ?= pkgstate-init
 
 export BOOTSTRAP_WORK BOOTSTRAP_BUILD_ROOT BOOTSTRAP_SEED_SHA256
 export BOOTSTRAP_INTERPRETER BOOTSTRAP_TOOLCHAIN_PREFIX BOOTSTRAP_PRIVILEGE BOOTSTRAP_MAX_STEPS
-export BOOTSTRAP_SOURCE_DATE_EPOCH PKGCTL PKGSTATE_INIT
+export BOOTSTRAP_JOBS BOOTSTRAP_SOURCE_DATE_EPOCH PKGCTL PKGSTATE_INIT
 
 .PHONY: all check check-bootstrap-harness check-bootstrap-init check-bootstrap-seed-probe check-dependencies check-filesystem check-glibc check-glibc-bootstrap check-libgcc check-linux-api-headers check-runtime-cohort check-source-realization
 .PHONY: bootstrap-init bootstrap-qualify bootstrap bootstrap-resume bootstrap-check bootstrap-clean
