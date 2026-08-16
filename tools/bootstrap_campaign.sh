@@ -86,7 +86,7 @@ identity_for()
 
 command_nonce()
 {
-  hash_material "zeppe-lin/pkgsrc-core-native/bootstrap-qualification/1:build-libgcc:$seed_sha256"
+  hash_material "zeppe-lin/pkgsrc-core-native/bootstrap-qualification/1:build-runtime-cohort-probe:$seed_sha256"
 }
 
 collection_commit()
@@ -251,7 +251,7 @@ preflight_seed_root()
   for tool in \
     ar as awk basename bison cat cc chmod cp dirname expr find flex g++ gawk gcc \
     grep install ld ln ls m4 make mkdir mv nm objcopy objdump python3 ranlib \
-    readelf rm sed sha256sum sort strip tar touch tr uname wc xz; do
+    readelf readlink rm sed sha256sum sort strip tar touch tr uname wc xz; do
     find_seed_tool "$tool"
   done
   for header in gmp.h mpfr.h mpc.h; do
@@ -315,6 +315,19 @@ stage_collection_projection()
     "$tar_bin" -xf - -C "$temporary"
   rm -f -- "$entries"
 
+  cohort_fixture=tests/fixtures/collections/bootstrap-runtime-cohort/runtime-cohort-probe
+  "$git_bin" -C "$repo" cat-file -e "$commit:$cohort_fixture/recipe.yml" 2>/dev/null ||
+    fail 'committed bootstrap runtime-cohort probe fixture is absent'
+  [ ! -e "$temporary/runtime-cohort-probe" ] ||
+    fail 'public collection collides with private runtime-cohort probe name'
+  "$git_bin" -C "$repo" archive --format=tar "$commit" -- "$cohort_fixture" |
+    "$tar_bin" -xf - -C "$temporary"
+  cohort_source=$temporary/$cohort_fixture
+  [ -f "$cohort_source/recipe.yml" ] ||
+    fail 'bootstrap runtime-cohort probe projection is malformed'
+  mv -- "$cohort_source" "$temporary/runtime-cohort-probe"
+  rm -rf -- "$temporary/tests"
+
   for entry in "$temporary"/*; do
     [ -e "$entry" ] || continue
     if [ -d "$entry" ]; then
@@ -369,6 +382,11 @@ load_marker_authority()
   recorded_supervisor_uid=$(sed -n 's/^supervisor-user-id=//p' "$marker")
   recorded_supervisor_gid=$(sed -n 's/^supervisor-group-id=//p' "$marker")
   recorded_supervisor_groups=$(sed -n 's/^supervisor-groups=//p' "$marker")
+  recorded_nonce=$(sed -n 's/^nonce=//p' "$marker")
+  [ -n "$recorded_nonce" ] || \
+    fail 'bootstrap workspace lacks command-goal authority; clean and reinitialize'
+  [ "$recorded_nonce" = "$(command_nonce)" ] || \
+    fail 'bootstrap command goal differs from initialized workspace authority; clean and reinitialize'
   [ -n "$recorded_toolchain_prefix" ] || \
     fail 'bootstrap workspace lacks private toolchain authority; clean and reinitialize'
   [ -n "$recorded_supervisor_uid" ] && [ -n "$recorded_supervisor_gid" ] && \
@@ -663,7 +681,7 @@ start_campaign()
   error=$reports/start.err
   interpreter=$(resolve_interpreter)
 
-  set -- build libgcc --check \
+  set -- build runtime-cohort-probe --check \
     --canonical-store "$state" \
     --collection "core-native=$collection_projection" \
     --build-architecture x86_64 \
@@ -742,6 +760,7 @@ check_campaign()
   require_command sed >/dev/null
   require_command grep >/dev/null
   require_command tar >/dev/null
+  require_command readlink >/dev/null
   readelf_bin=$(require_command readelf)
   git_bin=$(require_command git)
   load_marker_authority
@@ -757,8 +776,8 @@ check_campaign()
     fail 'retained report does not belong to the build frontend'
 
   artifact_count=$(grep -Ec '^artifact\.[0-9]+\.package ' "$latest")
-  [ "$artifact_count" -eq 3 ] || \
-    fail "bootstrap retained $artifact_count artifacts, expected exactly 3"
+  [ "$artifact_count" -eq 6 ] || \
+    fail "bootstrap retained $artifact_count artifacts, expected exactly 6"
 
   : >"$manifest.tmp"
   printf '%s\n' 'format zeppe-lin.bootstrap-manifest/1' >>"$manifest.tmp"
@@ -766,7 +785,7 @@ check_campaign()
   printf 'collection-commit %s\n' \
     "$recorded_collection_commit" >>"$manifest.tmp"
 
-  for package in linux-api-headers glibc-bootstrap libgcc; do
+  for package in filesystem glibc glibc-bootstrap libgcc linux-api-headers runtime-cohort-probe; do
     index=$(artifact_index "$package")
     [ -n "$index" ] || fail "retained report lacks $package artifact"
     [ "$(printf '%s\n' "$index" | wc -l | tr -d ' ')" -eq 1 ] || \
@@ -790,6 +809,15 @@ check_campaign()
       "$package" "$observed_sha" "$binding" "$image" >>"$manifest.tmp"
 
     case $package in
+      filesystem)
+        check_archive_member "$path" lib64
+        check_archive_member "$path" usr/lib64
+        ;;
+      glibc)
+        check_archive_member "$path" usr/include/gnu/stubs.h
+        check_archive_member "$path" usr/lib/libc.so.6
+        check_archive_member "$path" usr/lib/ld-linux-x86-64.so.2
+        ;;
       linux-api-headers)
         check_archive_member "$path" usr/include/linux/types.h
         ;;
@@ -820,8 +848,68 @@ check_campaign()
         rm -rf "$temporary"
         trap - EXIT HUP INT TERM
         ;;
+      runtime-cohort-probe)
+        check_archive_member "$path" usr/libexec/runtime-cohort-probe
+        check_archive_member "$path" runtime-cohort.ok
+        ;;
     esac
   done
+
+  filesystem_index=$(artifact_index filesystem)
+  glibc_index=$(artifact_index glibc)
+  libgcc_index=$(artifact_index libgcc)
+  probe_index=$(artifact_index runtime-cohort-probe)
+  filesystem_archive=$(artifact_field "$filesystem_index" path)
+  glibc_archive=$(artifact_field "$glibc_index" path)
+  libgcc_archive=$(artifact_field "$libgcc_index" path)
+  probe_archive=$(artifact_field "$probe_index" path)
+
+  cohort=$(mktemp -d "${TMPDIR:-/tmp}/pkgsrc-core-native-runtime-cohort.XXXXXX")
+  trap 'rm -rf "$cohort"' EXIT HUP INT TERM
+  mkdir "$cohort/filesystem" "$cohort/glibc" "$cohort/libgcc" "$cohort/probe"
+  tar -xf "$filesystem_archive" -C "$cohort/filesystem"
+  tar -xf "$glibc_archive" -C "$cohort/glibc"
+  tar -xf "$libgcc_archive" -C "$cohort/libgcc"
+  tar -xf "$probe_archive" -C "$cohort/probe"
+
+  [ "$(readlink "$cohort/filesystem/lib64")" = usr/lib64 ] ||
+    fail 'filesystem artifact /lib64 topology differs'
+  [ "$(readlink "$cohort/filesystem/usr/lib64")" = lib ] ||
+    fail 'filesystem artifact /usr/lib64 topology differs'
+  [ ! -e "$cohort/glibc/usr/lib/libgcc_s.so.1" ] ||
+    fail 'published glibc package tree contains libgcc runtime bytes'
+  [ ! -e "$cohort/libgcc/usr/lib/libc.so.6" ] ||
+    fail 'published libgcc package tree contains glibc runtime bytes'
+
+  probe_binary=$cohort/probe/usr/libexec/runtime-cohort-probe
+  probe_dynamic=$("$readelf_bin" -d "$probe_binary") ||
+    fail 'readelf rejected published runtime-cohort probe'
+  printf '%s\n' "$probe_dynamic" |
+    grep -F 'Shared library: [libgcc_s.so.1]' >/dev/null ||
+    fail 'published probe does not require libgcc_s.so.1'
+  printf '%s\n' "$probe_dynamic" |
+    grep -F 'Shared library: [libc.so.6]' >/dev/null ||
+    fail 'published probe does not require libc.so.6'
+  printf '%s\n' "$probe_dynamic" | grep -E 'Flags:.*NODEFLIB' >/dev/null ||
+    fail 'published probe permits default runtime library search'
+  if printf '%s\n' "$probe_dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+    fail 'published runtime-cohort probe carries RPATH/RUNPATH'
+  fi
+  probe_interpreter=$("$readelf_bin" -l "$probe_binary" |
+    sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p')
+  [ "$probe_interpreter" = /lib64/ld-linux-x86-64.so.2 ] ||
+    fail 'published runtime-cohort probe names the wrong interpreter ABI'
+
+  cohort_output=$(
+    "$cohort/glibc/usr/lib/ld-linux-x86-64.so.2" \
+      --inhibit-cache \
+      --library-path "$cohort/glibc/usr/lib:$cohort/libgcc/usr/lib" \
+      "$cohort/probe/usr/libexec/runtime-cohort-probe"
+  ) || fail 'published final glibc/libgcc runtime cohort did not execute'
+  [ "$cohort_output" = runtime-cohort-ok ] ||
+    fail 'published final runtime cohort output differs'
+  rm -rf "$cohort"
+  trap - EXIT HUP INT TERM
 
   mv "$manifest.tmp" "$manifest"
   cat "$manifest"
@@ -879,7 +967,7 @@ MARKER
     "supervisor-group-id=$supervisor_gid" \
     "supervisor-groups=$supervisor_groups" \
     "nonce=$(command_nonce)" \
-    'goal=build=libgcc,check=libgcc'
+    'goal=build=runtime-cohort-probe,check=runtime-cohort-probe'
 }
 
 clean_campaign()

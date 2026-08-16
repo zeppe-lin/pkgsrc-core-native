@@ -1,0 +1,164 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: runtime-cohort-probe
+  version: 1.0
+  release: 1
+  summary: Native glibc/libgcc runtime cohort qualification
+  licenses:
+    - GPL-3.0-or-later
+requirements:
+  build:
+    - package: filesystem
+    - package: glibc
+    - package: libgcc
+  check:
+    - package: filesystem
+    - package: glibc
+    - package: libgcc
+sources: []
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "runtime-cohort-probe build: $*" >&2
+      exit 1
+    }
+
+    [ -z "${PKG_CHECK_INPUT_ROOT+x}" ] || fail 'check input root ABI leaked into build'
+    [ -z "${PKG_CHECK_INPUTS+x}" ] || fail 'check input vocabulary leaked into build'
+    old_ifs=$IFS
+    IFS=:
+    set -- $PKG_BUILD_INPUTS
+    IFS=$old_ifs
+    [ "$#" -eq 3 ] || fail 'build input vocabulary cardinality differs from cohort authority'
+    vocabulary=:$PKG_BUILD_INPUTS:
+    for input in filesystem glibc libgcc; do
+      case $vocabulary in
+        *:"$input":*) ;;
+        *) fail "build input vocabulary omits cohort authority: $input" ;;
+      esac
+    done
+
+    filesystem="$PKG_BUILD_INPUT_ROOT/filesystem"
+    libc="$PKG_BUILD_INPUT_ROOT/glibc"
+    libgcc="$PKG_BUILD_INPUT_ROOT/libgcc"
+
+    [ -L "$filesystem/lib64" ] || fail 'filesystem lacks /lib64 alias'
+    [ "$(readlink "$filesystem/lib64")" = usr/lib64 ] || \
+      fail 'filesystem /lib64 alias differs'
+    [ -L "$filesystem/usr/lib64" ] || fail 'filesystem lacks /usr/lib64 alias'
+    [ "$(readlink "$filesystem/usr/lib64")" = lib ] || \
+      fail 'filesystem /usr/lib64 alias differs'
+    [ -x "$libc/usr/lib/ld-linux-x86-64.so.2" ] || fail 'glibc loader is absent'
+    [ -f "$libc/usr/lib/libc.so.6" ] || fail 'glibc runtime is absent'
+    [ -f "$libgcc/usr/lib/libgcc_s.so.1" ] || fail 'libgcc runtime is absent'
+    [ ! -e "$libc/usr/lib/libgcc_s.so.1" ] || fail 'libgcc leaked into glibc package tree'
+    [ ! -e "$libgcc/usr/lib/libc.so.6" ] || fail 'glibc leaked into libgcc package tree'
+
+    cat > cohort.c <<'C'
+    #include <stdio.h>
+    #include <unwind.h>
+
+    static _Unwind_Reason_Code count_frame(
+        struct _Unwind_Context *context, void *argument)
+    {
+      int *count = (int *)argument;
+      (void)context;
+      ++*count;
+      return _URC_NO_REASON;
+    }
+
+    int main(void)
+    {
+      int count = 0;
+      _Unwind_Backtrace(count_frame, &count);
+      if (count <= 0)
+        return 2;
+      return puts("runtime-cohort-ok") < 0;
+    }
+    C
+
+    gcc cohort.c -Wl,--no-as-needed -lgcc_s -Wl,--as-needed -Wl,-z,nodefaultlib -o cohort-probe
+    dynamic=$(readelf -d cohort-probe) || fail 'readelf rejected cohort probe'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgcc_s.so.1]' >/dev/null || \
+      fail 'probe does not require libgcc_s.so.1'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libc.so.6]' >/dev/null || \
+      fail 'probe does not require libc.so.6'
+    printf '%s\n' "$dynamic" | grep -E 'Flags:.*NODEFLIB' >/dev/null || \
+      fail 'probe permits default runtime library search'
+    interpreter=$(readelf -l cohort-probe | sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p')
+    [ "$interpreter" = /lib64/ld-linux-x86-64.so.2 ] || \
+      fail 'probe does not name the final x86_64 loader ABI'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'probe carries a construction search path'
+    fi
+
+    output=$("$libc/usr/lib/ld-linux-x86-64.so.2" \
+      --inhibit-cache \
+      --library-path "$libc/usr/lib:$libgcc/usr/lib" ./cohort-probe) || \
+      fail 'final glibc/libgcc cohort did not execute'
+    [ "$output" = runtime-cohort-ok ] || fail 'final runtime cohort output differs'
+
+    mkdir -p "$PKG_DESTDIR/usr/libexec"
+    install -m 0555 cohort-probe "$PKG_DESTDIR/usr/libexec/runtime-cohort-probe"
+    printf '%s\n' qualified >"$PKG_DESTDIR/runtime-cohort.ok"
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "runtime-cohort-probe check: $*" >&2
+      exit 1
+    }
+
+    [ -z "${PKG_BUILD_INPUT_ROOT+x}" ] || fail 'build input root ABI leaked into check'
+    [ -z "${PKG_BUILD_INPUTS+x}" ] || fail 'build input vocabulary leaked into check'
+
+    filesystem="$PKG_CHECK_INPUT_ROOT/filesystem"
+    libc="$PKG_CHECK_INPUT_ROOT/glibc"
+    libgcc="$PKG_CHECK_INPUT_ROOT/libgcc"
+    probe="$PKG_PACKAGE_ROOT/usr/libexec/runtime-cohort-probe"
+
+    [ "$(cat "$PKG_PACKAGE_ROOT/runtime-cohort.ok")" = qualified ] || \
+      fail 'sealed probe marker differs'
+    [ -L "$filesystem/lib64" ] || fail 'reconstructed filesystem input lacks /lib64 alias'
+    [ -x "$libc/usr/lib/ld-linux-x86-64.so.2" ] || fail 'reconstructed glibc loader is absent'
+    [ -f "$libgcc/usr/lib/libgcc_s.so.1" ] || fail 'reconstructed libgcc runtime is absent'
+    [ -x "$probe" ] || fail 'sealed runtime cohort probe is absent'
+
+    old_ifs=$IFS
+    IFS=:
+    set -- $PKG_CHECK_INPUTS
+    IFS=$old_ifs
+    [ "$#" -eq 3 ] || fail 'check input vocabulary cardinality differs from cohort authority'
+    vocabulary=:$PKG_CHECK_INPUTS:
+    for input in filesystem glibc libgcc; do
+      case $vocabulary in
+        *:"$input":*) ;;
+        *) fail "check input vocabulary omits cohort authority: $input" ;;
+      esac
+    done
+
+    output=$("$libc/usr/lib/ld-linux-x86-64.so.2" \
+      --inhibit-cache \
+      --library-path "$libc/usr/lib:$libgcc/usr/lib" "$probe") || \
+      fail 'reconstructed final runtime cohort did not execute'
+    [ "$output" = runtime-cohort-ok ] || fail 'reconstructed runtime cohort output differs'
+
+    if printf hostile >"$PKG_PACKAGE_ROOT/runtime-cohort.write" 2>/dev/null; then
+      fail 'checked probe package is writable'
+    fi
+    if printf hostile >"$libgcc/usr/lib/runtime-cohort.write" 2>/dev/null; then
+      fail 'reconstructed libgcc input is writable'
+    fi
+architectures:
+  build: [x86_64]
+  target: [x86_64]

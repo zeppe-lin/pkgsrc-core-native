@@ -34,7 +34,7 @@ build:
     for tool in \
       ar as awk basename bison cat cc chmod cp dirname expr find flex g++ gawk gcc \
       grep install ld ln ls m4 make mkdir mv nm objcopy objdump python3 ranlib \
-      readelf rm sed sha256sum sort strip tar touch tr uname wc xz; do
+      readelf readlink rm sed sha256sum sort strip tar touch tr uname wc xz; do
       command -v "$tool" >/dev/null 2>&1 || fail "required seed tool is unavailable: $tool"
     done
 
@@ -47,6 +47,8 @@ build:
     [ "$(printf '%s\n' one | wc -l | tr -d ' ')" = 1 ] || fail 'wc/tr pipeline failed'
     sha256sum text | awk '{ if (length($1) != 64) exit 1 }' || fail 'sha256sum/awk pipeline failed'
     uname -m >/dev/null || fail 'uname did not execute'
+    ln -s text seed-probe.link
+    [ "$(readlink seed-probe.link)" = text ] || fail 'readlink did not execute'
 
     mkdir tar-source tar-result
     cp text tar-source/payload

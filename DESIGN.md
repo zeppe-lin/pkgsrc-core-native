@@ -234,19 +234,29 @@ runtime edges.
 
 ## Bootstrap qualification campaign
 
-The repository carries a thin qualification harness for the first native
-construction closure. It is not another recipe executor or dependency solver.
-`make bootstrap` admits exactly one `pkgctl build libgcc --check` command. The
-native resolver discovers the construction closure:
+The repository carries a thin qualification harness around the native
+construction controller. It is not another recipe executor or dependency
+solver. The first campaign proved the nucleus `linux-api-headers ->
+glibc-bootstrap -> libgcc` plus the real libgcc check. The next bounded campaign
+closes the first final runtime cohort before admitting unrelated core packages:
 
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
+linux-api-headers -> glibc
+                    glibc <-> libgcc   (run)
+filesystem + glibc + libgcc -> runtime-cohort-probe   (build + check)
 ```
 
-and admits the real `libgcc` package check after construction. The check receives
-the exact retained verified source-object tree and sealed package image through
-the native check root. Archive extraction remains construction-workspace
-authority; the check does not reuse or reconstruct that workspace.
+`make bootstrap` admits exactly one `pkgctl build runtime-cohort-probe --check`
+command. The runtime-cohort probe is qualification machinery, not public
+collection membership: the harness stages its committed fixture bytes only into
+the private admitted collection projection. BUILD consumes the exact
+`filesystem`, final `glibc`, and `libgcc` package inputs and executes a tiny
+unwind probe with the package-owned glibc loader and only the two final runtime
+library trees. CHECK reconstructs those three inputs and the sealed probe image
+independently and repeats the execution. Reciprocal runtime authority is thereby
+exercised without turning runtime cohort membership into cyclic construction
+precedence or borrowing final runtime bytes from the seed root.
 
 The harness never runs recipe programs directly and never loops over package
 names to construct them independently. Source acquisition, package-input
@@ -271,7 +281,8 @@ command nonce. These are qualification identities only. They are not installed
 system truth and must not be reused as future rootfs deployment identities.
 
 The harness preflights the current external seed capabilities required by the
-three recipes, including the exact `/bin/sh` coordinate, compiler/C++ compiler,
+bounded bootstrap recipes and qualification probes, including the exact
+`/bin/sh` coordinate, compiler/C++ compiler,
 binutils inspection, GNU make, Python, ordinary POSIX/GNU build utilities,
 Bison/Flex, and GMP/MPFR/MPC development headers. This inventory is
 intentionally visible: later native package authority should make entries
@@ -335,8 +346,10 @@ re-observe the tuple and fail closed on drift. The Makefile exposes no arbitrary
 `bootstrap-init` creates one empty provider-owned canonical state store using
 `pkgstate-init`, the private runtime hierarchy, and the public artifact root.
 It records the exact seed identity, build-root coordinate, interpreter, clean
-collection commit, and deterministic qualification nonce in the local
-workspace marker.
+collection commit, and deterministic command-goal nonce in the local workspace
+marker. Start and resume require that nonce to match the current harness goal; a
+changed campaign definition therefore fails closed and requires explicit cleanup
+and reinitialization instead of attempting to reinterpret an old workspace.
 
 `bootstrap` starts one bounded command. `bootstrap-resume` carries no catalog,
 goal, architecture, or binding restatement; it uses `pkgctl build --resume`
@@ -347,11 +360,15 @@ turning the harness into an implicit retry loop.
 ### Artifact qualification
 
 `bootstrap-check` requires a terminal successful checked build frontend result
-and exactly three published artifacts: `linux-api-headers`, `glibc-bootstrap`, and
-`libgcc`. It independently verifies the retained artifact SHA-256 values and
-key archive members, then checks the extracted `libgcc_s.so.1` SONAME, final
-`libc.so.6` and `ld-linux-x86-64.so.2` dependencies, and absence of
-RPATH/RUNPATH.
+and exactly six published artifacts: `filesystem`, final `glibc`,
+`glibc-bootstrap`, `libgcc`, `linux-api-headers`, and the private
+`runtime-cohort-probe`. It independently verifies retained artifact SHA-256
+values and key archive members, checks the extracted `libgcc_s.so.1` SONAME,
+final `libc.so.6` and `ld-linux-x86-64.so.2` dependencies, and absence of
+RPATH/RUNPATH. It then reconstructs the published filesystem/glibc/libgcc/probe
+artifacts, verifies the filesystem loader aliases, and runs the sealed probe
+through the published final glibc loader with only the published glibc/libgcc
+library trees in its explicit search path.
 
 The command emits `BOOTSTRAP_WORK/bootstrap.manifest`, a path-independent
 manifest containing the seed digest, admitted collection commit, and each

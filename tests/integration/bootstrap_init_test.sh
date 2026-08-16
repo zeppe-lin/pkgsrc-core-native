@@ -23,7 +23,7 @@ ln -s bootstrap-tool "$seed/bin/sh"
 for tool in \
   ar as awk basename bison cat cc chmod cp dirname expr find flex g++ gawk gcc \
   grep install ld ln ls m4 make mkdir mv nm objcopy objdump python3 ranlib \
-  readelf rm sed sha256sum sort strip tar touch tr uname wc xz; do
+  readelf readlink rm sed sha256sum sort strip tar touch tr uname wc xz; do
   ln -s ../../bin/bootstrap-tool "$seed/usr/bin/$tool"
 done
 for header in gmp.h mpfr.h mpc.h; do
@@ -104,6 +104,26 @@ grep -Fx 'bootstrap seed runtime qualification: ok' "$temporary/qualify.out" >/d
   fail 'qualification did not report terminal success'
 [ ! -e "$work/qualification" ] || \
   fail 'successful qualification retained private probe workspace'
+
+cp "$work/.pkgsrc-core-native-bootstrap-v1" "$temporary/marker.good"
+sed 's/^nonce=.*/nonce=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/' \
+  "$temporary/marker.good" >"$work/.pkgsrc-core-native-bootstrap-v1"
+set +e
+BOOTSTRAP_WORK=$work \
+BOOTSTRAP_BUILD_ROOT=$seed \
+BOOTSTRAP_SEED_SHA256=$seed_sha \
+BOOTSTRAP_INTERPRETER=$seed/bin/bash \
+BOOTSTRAP_TOOLCHAIN_PREFIX=$toolchain \
+PKGCTL=pkgctl \
+PKGSTATE_INIT=pkgstate-init \
+  "$harness" resume >"$temporary/goal-drift.out" 2>"$temporary/goal-drift.err"
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail 'changed bootstrap command-goal nonce was resumed'
+grep -F 'bootstrap command goal differs from initialized workspace authority' \
+  "$temporary/goal-drift.err" >/dev/null || \
+  fail 'changed command-goal nonce failed outside marker authority admission'
+cp "$temporary/marker.good" "$work/.pkgsrc-core-native-bootstrap-v1"
 
 rm -rf "$work"
 mkdir "$seed/build/inputs/build"

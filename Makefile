@@ -16,12 +16,12 @@ export BOOTSTRAP_WORK BOOTSTRAP_BUILD_ROOT BOOTSTRAP_SEED_SHA256
 export BOOTSTRAP_INTERPRETER BOOTSTRAP_TOOLCHAIN_PREFIX BOOTSTRAP_PRIVILEGE BOOTSTRAP_MAX_STEPS
 export BOOTSTRAP_SOURCE_DATE_EPOCH PKGCTL PKGSTATE_INIT
 
-.PHONY: all check check-bootstrap-harness check-bootstrap-init check-bootstrap-seed-probe check-dependencies check-filesystem check-glibc check-glibc-bootstrap check-libgcc check-linux-api-headers check-source-realization
+.PHONY: all check check-bootstrap-harness check-bootstrap-init check-bootstrap-seed-probe check-dependencies check-filesystem check-glibc check-glibc-bootstrap check-libgcc check-linux-api-headers check-runtime-cohort check-source-realization
 .PHONY: bootstrap-init bootstrap-qualify bootstrap bootstrap-resume bootstrap-check bootstrap-clean
 
 all: check
 
-check: check-filesystem check-dependencies check-source-realization check-linux-api-headers check-glibc check-glibc-bootstrap check-libgcc check-bootstrap-harness check-bootstrap-seed-probe check-bootstrap-init
+check: check-filesystem check-dependencies check-source-realization check-linux-api-headers check-glibc check-glibc-bootstrap check-libgcc check-runtime-cohort check-bootstrap-harness check-bootstrap-seed-probe check-bootstrap-init
 
 check-filesystem:
 	@tests/contracts/check_filesystem_boundary.sh
@@ -43,6 +43,9 @@ check-glibc-bootstrap:
 
 check-libgcc:
 	@tests/contracts/check_libgcc_boundary.sh
+
+check-runtime-cohort:
+	@tests/contracts/check_runtime_cohort_boundary.sh
 
 check-bootstrap-harness:
 	@tests/contracts/check_bootstrap_harness.sh

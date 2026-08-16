@@ -94,19 +94,29 @@ them. In particular, `filesystem` carries no `fstab`, `passwd`, `group`,
 
 ## Bootstrap qualification
 
-The first native construction closure and a real package check can be exercised
-through the repository Makefile without bypassing `pkgctl`:
+The first native construction nucleus proved `linux-api-headers ->
+glibc-bootstrap -> libgcc` and the real `libgcc` check. The current bounded
+campaign closes the first final runtime cohort rather than immediately walking
+more of the collection:
 
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
+linux-api-headers -> glibc
+                    glibc <-> libgcc   (run)
+filesystem + glibc + libgcc -> runtime-cohort-probe   (build + check)
 ```
 
-The public campaign is `pkgctl build libgcc --check`: after the three real
-archive-backed constructions, the native check path reopens the exact retained
-verified GCC source object through `PKG_SOURCE_ROOT` and the sealed `libgcc`
-package image through `PKG_PACKAGE_ROOT`, then verifies the final ELF runtime
-ABI. Archive extraction remains construction-workspace authority; check does
-not reconstruct the build workspace.
+The admitted command is `pkgctl build runtime-cohort-probe --check`. The
+private `runtime-cohort-probe` is committed test/qualification machinery and is
+injected only into the recorded `.bootstrap/collection` projection; it is not
+public collection membership. Its build consumes exact `filesystem`, final
+`glibc`, and `libgcc` package inputs, links a tiny unwind executable, and runs
+that executable through the package-owned final glibc loader with a library
+path containing only the exact glibc/libgcc package trees. CHECK reconstructs
+the same three inputs independently and executes the sealed probe again. This
+attacks runtime-cohort resolution, build/check package-input projection, final
+loader/library compatibility, restart reconstruction, and package-tree
+separation without pretending the seed root is final runtime authority.
 
 Prepare a **disposable extraction** of a known construction root. For
 the first cross-host qualification, use the same Zeppe-Lin 1.x rootfs archive
@@ -144,12 +154,15 @@ cleans caller-supplied root-view bytes. Inspect and remove such residue
 deliberately before reinitializing.
 
 Catalog acquisition does not point at the repository root. `bootstrap-init` and
-`bootstrap` derive `.bootstrap/collection` from the admitted Git commit, including
-only immediate committed package directories that contain `recipe.yml` and the
-committed `profiles.yml` when one exists. Repository machinery such as `tests/`,
-`tools/`, `Makefile`, and design documentation therefore never enters collection
-discovery authority. The projection is regenerated from the recorded commit
-before a new command is admitted.
+`bootstrap` derive `.bootstrap/collection` from the admitted Git commit. Public
+collection membership still comes only from immediate committed package
+directories containing `recipe.yml`, plus committed `profiles.yml` when present.
+For the bounded cohort campaign the harness additionally extracts exactly the
+committed private `runtime-cohort-probe` fixture and places it at the projection
+root; no surrounding `tests/` machinery enters catalog authority. `tools/`,
+`Makefile`, documentation, and every other test fixture remain outside discovery.
+The projection is regenerated from the recorded commit before a new command is
+admitted.
 
 The harness also consumes the private native-toolchain prefix built by the
 zoo-level `build-new-toolchain.sh`. With the normal sibling layout it discovers
@@ -201,7 +214,7 @@ on success that workspace is removed, while failure evidence is retained for
 inspection.
 
 `make bootstrap` runs the same qualification gate again before admitting the
-expensive `libgcc --check` campaign. Native Linux isolation normally needs
+expensive final runtime-cohort campaign. Native Linux isolation normally needs
 privilege. Keep `make` itself under the calling user and let the harness elevate
 only the `pkgctl` process:
 
@@ -222,6 +235,11 @@ continue the same retained command with:
 make bootstrap-resume BOOTSTRAP_PRIVILEGE=sudo
 ```
 
+The workspace marker binds the deterministic command-goal nonce. A repository
+update that changes the bounded bootstrap goal is not a resumable reinterpretation
+of old evidence: resume fails closed and requires `bootstrap-clean` followed by a
+new `bootstrap-init`.
+
 After a terminal result:
 
 ```sh
@@ -229,9 +247,14 @@ make bootstrap-check
 cat .bootstrap/bootstrap.manifest
 ```
 
-`bootstrap-check` requires a terminal successful checked campaign, exactly the
-three expected artifacts, and independently checks their retained hashes plus the
-final `libgcc_s.so.1` ELF runtime closure.
+`bootstrap-check` requires a terminal successful checked campaign and exactly
+six artifacts: `filesystem`, final `glibc`, `glibc-bootstrap`, `libgcc`,
+`linux-api-headers`, and the private runtime-cohort probe. It independently
+checks their retained hashes and archive members, validates the filesystem
+loader aliases and `libgcc_s.so.1` ELF runtime closure, then extracts the
+published final glibc/libgcc/probe artifacts and executes the published probe
+through the published glibc loader with only those package-owned runtime
+libraries visible.
 For the first reproducibility experiment, run the same collection commit and
 same seed rootfs archive once on the current Zeppe-Lin machine and once on the
 Ubuntu machine, then compare the two `bootstrap.manifest` files byte for byte.
