@@ -21,6 +21,17 @@ expected_recipes = {
     'libgcc',
     'linux-api-headers',
 }
+visible_dirs = {
+    path.name
+    for path in ROOT.iterdir()
+    if path.is_dir() and not path.name.startswith('.')
+}
+if visible_dirs != expected_recipes:
+    fail(
+        'visible collection namespace differs: expected ' +
+        ', '.join(sorted(expected_recipes)) +
+        '; got ' + ', '.join(sorted(visible_dirs)))
+
 recipe_dirs = {
     path.parent.name
     for path in ROOT.glob('*/recipe.yml')
