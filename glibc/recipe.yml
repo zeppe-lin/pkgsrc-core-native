@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: glibc
   version: 2.44
-  release: 4
+  release: 5
   summary: GNU C Library
   homepage: https://www.gnu.org/software/libc/
   licenses:
@@ -127,16 +127,21 @@ build:
       }
     done
 
-    # C.UTF-8 locale data is execution policy, but translated diagnostic
-    # catalogs are outside the foundation libc package scope.  LINGUAS=C above
-    # must therefore leave no gettext catalog payload behind.
-    if [ -d "$PKG_DESTDIR/usr/share/locale" ]; then
-      if find "$PKG_DESTDIR/usr/share/locale" -mindepth 1 -print -quit | grep . >/dev/null; then
-        printf '%s\n' 'glibc: translated message catalog leaked into foundation payload' >&2
-        exit 1
-      fi
-      rmdir "$PKG_DESTDIR/usr/share/locale"
-    fi
+    # C.UTF-8 locale data is execution policy and locale.alias is glibc's
+    # message-locale alias database.  Translated diagnostic catalogs remain
+    # outside the foundation libc package scope.  LINGUAS=C above must
+    # therefore leave locale.alias as the only /usr/share/locale payload.
+    locale_dir="$PKG_DESTDIR/usr/share/locale"
+    test -d "$locale_dir"
+    test -f "$locale_dir/locale.alias"
+    test ! -L "$locale_dir/locale.alias"
+    test -s "$locale_dir/locale.alias"
+    extra=$(find "$locale_dir" -mindepth 1 \
+      ! -path "$locale_dir/locale.alias" -print -quit)
+    [ -z "$extra" ] || {
+      printf '%s\n' "glibc: unexpected message-catalog payload: ${extra#"$PKG_DESTDIR/"}" >&2
+      exit 1
+    }
 
     # libc owns runtime/library ABI, headers and static data. Machine policy,
     # service state, timezone policy and interpreter-dependent helper scripts

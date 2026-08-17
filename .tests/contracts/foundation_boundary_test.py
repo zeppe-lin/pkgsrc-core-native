@@ -62,7 +62,7 @@ for misplaced in ('acl', 'attr', 'lz4', 'xz', 'zlib', 'zstd'):
 
 glibc = (ROOT / 'glibc' / 'recipe.yml').read_text(encoding='utf-8')
 required_glibc_fragments = (
-    '  release: 4',
+    '  release: 5',
     'C.UTF-8',
     '"$PKG_DESTDIR/usr/bin/localedef"',
     '--prefix="$PKG_DESTDIR"',
@@ -71,7 +71,10 @@ required_glibc_fragments = (
     "--list-archive | grep -Fx 'C.utf8' >/dev/null",
     'rootsbindir=/usr/sbin',
     'LINGUAS=C',
-    'translated message catalog leaked into foundation payload',
+    'locale.alias',
+    'unexpected message-catalog payload',
+    'find "$locale_dir" -mindepth 1',
+    '! -path "$locale_dir/locale.alias"',
     'normalize_lib_alias lib64',
     'normalize_lib_alias usr/lib64',
     'final payload retains merged-/usr descendants below $alias',
@@ -81,6 +84,8 @@ for fragment in required_glibc_fragments:
         fail(f'glibc does not close C.UTF-8 authority: missing {fragment!r}')
 if 'localedef failed (non-fatal)' in glibc or 'localedef ||' in glibc:
     fail('glibc C.UTF-8 creation became best-effort')
+if 'rmdir "$PKG_DESTDIR/usr/share/locale"' in glibc:
+    fail('glibc deletes its locale alias authority while suppressing translations')
 
 readme = (ROOT / 'README.md').read_text(encoding='utf-8')
 readme_words = ' '.join(readme.split())
