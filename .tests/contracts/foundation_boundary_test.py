@@ -62,13 +62,16 @@ for misplaced in ('acl', 'attr', 'lz4', 'xz', 'zlib', 'zstd'):
 
 glibc = (ROOT / 'glibc' / 'recipe.yml').read_text(encoding='utf-8')
 required_glibc_fragments = (
-    '  release: 3',
+    '  release: 4',
     'C.UTF-8',
     '"$PKG_DESTDIR/usr/bin/localedef"',
     '--prefix="$PKG_DESTDIR"',
     '-i ../glibc-2.44/localedata/locales/C',
     '-f ../glibc-2.44/localedata/charmaps/UTF-8',
     "--list-archive | grep -Fx 'C.utf8' >/dev/null",
+    'rootsbindir=/usr/sbin',
+    'LINGUAS=C',
+    'translated message catalog leaked into foundation payload',
     'normalize_lib_alias lib64',
     'normalize_lib_alias usr/lib64',
     'final payload retains merged-/usr descendants below $alias',

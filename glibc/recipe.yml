@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: glibc
   version: 2.44
-  release: 3
+  release: 4
   summary: GNU C Library
   homepage: https://www.gnu.org/software/libc/
   licenses:
@@ -32,6 +32,15 @@ build:
 
     mkdir glibc-build
     cd glibc-build
+
+    # glibc treats root administrative programs as a separate installation
+    # namespace.  In a merged-/usr system /sbin is only an alias owned by the
+    # filesystem package, so bind that upstream-supported namespace directly
+    # to its canonical /usr location before configuration.
+    cat >configparms <<'EOF'
+    rootsbindir=/usr/sbin
+    LINGUAS=C
+    EOF
 
     libc_cv_slibdir=/usr/lib \
     libc_cv_rtlddir=/lib64 \
@@ -117,6 +126,17 @@ build:
         exit 1
       }
     done
+
+    # C.UTF-8 locale data is execution policy, but translated diagnostic
+    # catalogs are outside the foundation libc package scope.  LINGUAS=C above
+    # must therefore leave no gettext catalog payload behind.
+    if [ -d "$PKG_DESTDIR/usr/share/locale" ]; then
+      if find "$PKG_DESTDIR/usr/share/locale" -mindepth 1 -print -quit | grep . >/dev/null; then
+        printf '%s\n' 'glibc: translated message catalog leaked into foundation payload' >&2
+        exit 1
+      fi
+      rmdir "$PKG_DESTDIR/usr/share/locale"
+    fi
 
     # libc owns runtime/library ABI, headers and static data. Machine policy,
     # service state, timezone policy and interpreter-dependent helper scripts
