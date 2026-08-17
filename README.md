@@ -85,6 +85,11 @@ The reciprocal final `glibc <-> libgcc` runtime requirement is a package-level
 runtime cohort. It does not create collection ordering policy and is not encoded
 in profile member order.
 
+The final glibc payload installs exactly `C.UTF-8` because the native build
+policy admits that locale as an execution invariant. Message-catalog/NLS policy
+is separate from libc locale authority; the foundation must not depend on the
+historical seed to supply a locale named by its own build contract.
+
 Future target C++ runtime authority such as `libstdc++` belongs on the stable
 foundation side when its ownership is split cleanly from the compiler package.
 

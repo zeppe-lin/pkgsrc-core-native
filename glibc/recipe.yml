@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: glibc
   version: 2.44
-  release: 1
+  release: 2
   summary: GNU C Library
   homepage: https://www.gnu.org/software/libc/
   licenses:
@@ -54,6 +54,21 @@ build:
 
     make -j "$PKG_JOBS"
     make install_root="$PKG_DESTDIR" install
+
+    # The native build policy closes execution locale at C.UTF-8. Install that
+    # exact locale into the target libc payload using the newly built loader
+    # and localedef, rather than inheriting locale authority from the seed.
+    mkdir -p "$PKG_DESTDIR/usr/lib/locale"
+    LC_ALL=C ./elf/ld.so --library-path . \
+      "$PKG_DESTDIR/usr/bin/localedef" \
+      --prefix="$PKG_DESTDIR" \
+      -i ../glibc-2.44/localedata/locales/C \
+      -f ../glibc-2.44/localedata/charmaps/UTF-8 \
+      C.UTF-8
+    LC_ALL=C ./elf/ld.so --library-path . \
+      "$PKG_DESTDIR/usr/bin/localedef" \
+      --prefix="$PKG_DESTDIR" \
+      --list-archive | grep -Fx 'C.utf8' >/dev/null
 
     # The x86_64 ABI names /lib64/ld-linux-x86-64.so.2 as the interpreter.
     # The filesystem package owns /lib64 -> usr/lib64 -> lib, so retain that
