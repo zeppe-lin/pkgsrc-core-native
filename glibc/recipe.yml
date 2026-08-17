@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: glibc
   version: 2.44
-  release: 2
+  release: 3
   summary: GNU C Library
   homepage: https://www.gnu.org/software/libc/
   licenses:
@@ -70,18 +70,53 @@ build:
       --prefix="$PKG_DESTDIR" \
       --list-archive | grep -Fx 'C.utf8' >/dev/null
 
-    # The x86_64 ABI names /lib64/ld-linux-x86-64.so.2 as the interpreter.
-    # The filesystem package owns /lib64 -> usr/lib64 -> lib, so retain that
-    # ABI path while storing the loader bytes in the canonical /usr tree.
-    if [ -d "$PKG_DESTDIR/lib64" ]; then
+    # The x86_64 ABI names /lib64/ld-linux-x86-64.so.2 as the interpreter,
+    # but filesystem owns the merged-/usr aliases.  Upstream install logic may
+    # stage ABI material through either /lib64 or /usr/lib64; neither spelling
+    # is package namespace authority for libc.  Normalize both into /usr/lib
+    # before sealing the final image.
+    normalize_lib_alias()
+    {
+      alias=$1
+      source="$PKG_DESTDIR/$alias"
+      [ ! -L "$source" ] || {
+        printf '%s\n' "glibc: package payload unexpectedly owns alias symlink $alias" >&2
+        exit 1
+      }
+      [ -d "$source" ] || return 0
       mkdir -p "$PKG_DESTDIR/usr/lib"
-      for path in "$PKG_DESTDIR"/lib64/*; do
+      for path in "$source"/*; do
         [ -e "$path" ] || [ -L "$path" ] || continue
         mv "$path" "$PKG_DESTDIR/usr/lib/"
       done
-      rmdir "$PKG_DESTDIR/lib64"
-    fi
+      rmdir "$source"
+    }
+
+    normalize_lib_alias lib64
+    normalize_lib_alias usr/lib64
     test -e "$PKG_DESTDIR/usr/lib/ld-linux-x86-64.so.2"
+
+    # No ordinary package may publish below the aliases owned by filesystem.
+    # Keep this as a build-time assault so an upstream layout change dies while
+    # constructing glibc rather than during target application hours later.
+    for alias in bin sbin lib lib32 lib64 usr/lib64; do
+      path="$PKG_DESTDIR/$alias"
+      [ ! -L "$path" ] || {
+        printf '%s\n' "glibc: final payload owns merged-/usr alias $alias" >&2
+        exit 1
+      }
+      if [ -d "$path" ]; then
+        if find "$path" -mindepth 1 -print -quit | grep . >/dev/null; then
+          printf '%s\n' "glibc: final payload retains merged-/usr descendants below $alias" >&2
+          exit 1
+        fi
+        rmdir "$path"
+      fi
+      [ ! -e "$path" ] || {
+        printf '%s\n' "glibc: final payload retains merged-/usr object $alias" >&2
+        exit 1
+      }
+    done
 
     # libc owns runtime/library ABI, headers and static data. Machine policy,
     # service state, timezone policy and interpreter-dependent helper scripts
