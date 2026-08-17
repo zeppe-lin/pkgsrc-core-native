@@ -5,12 +5,6 @@ format: zeppe-lin.profiles/1
 profiles:
   foundation:
     members:
-      - package: acl
-      - package: attr
       - package: filesystem
       - package: glibc
       - package: libgcc
-      - package: lz4
-      - package: xz
-      - package: zlib
-      - package: zstd
