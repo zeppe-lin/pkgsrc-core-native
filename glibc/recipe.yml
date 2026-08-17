@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: glibc
   version: 2.44
-  release: 5
+  release: 6
   summary: GNU C Library
   homepage: https://www.gnu.org/software/libc/
   licenses:
@@ -15,6 +15,7 @@ requirements:
   build:
     - package: linux-api-headers
   run:
+    - package: filesystem
     - package: libgcc
 sources:
   - url: https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz

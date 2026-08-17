@@ -17,7 +17,9 @@ It then requires the current foundation recipe set to remain limited to
 the stable ABI/runtime substrate plus the two admitted construction-only cycle
 breakers. It also requires `@foundation` to contain only deployable members and
 requires final glibc to fail closed while installing the exact `C.UTF-8` locale
-named by the native build policy.
+named by the native build policy. It also freezes glibc's runtime authority on
+`filesystem` plus `libgcc`: the first edge binds the merged-/usr interpreter
+topology and the second retains the reciprocal compiler-runtime cohort.
 
 This test does not prove seed retirement. That proof belongs to the product
 controller: after composing the foundation construction root it must make the

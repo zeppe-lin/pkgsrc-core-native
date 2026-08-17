@@ -82,8 +82,12 @@ installation membership, and build-only authority is not promoted into target
 state by directory presence.
 
 The reciprocal final `glibc <-> libgcc` runtime requirement is a package-level
-runtime cohort. It does not create collection ordering policy and is not encoded
-in profile member order.
+runtime cohort. Final glibc also requires `filesystem`: its x86_64 interpreter
+ABI names `/lib64/ld-linux-x86-64.so.2`, while `filesystem` owns the merged-/usr
+aliases that make that target spelling resolve to glibc's canonical `/usr/lib`
+payload. This is runtime authority, not a profile-ordering hint. The transaction
+engine projects the crossing requirement onto the complete runtime-cohort
+condensation boundary.
 
 The final glibc payload installs exactly `C.UTF-8` because the native build
 policy admits that locale as an execution invariant. Message-catalog/NLS policy
@@ -106,7 +110,8 @@ the first libc/compiler-runtime cycle:
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
 linux-api-headers -> glibc
-                    glibc <-> libgcc   (run)
+filesystem ---------------------> glibc
+                                 glibc <-> libgcc   (run cohort)
 ```
 
 `glibc-bootstrap` is construction authority only. It is not an alternate libc,

@@ -62,7 +62,7 @@ for misplaced in ('acl', 'attr', 'lz4', 'xz', 'zlib', 'zstd'):
 
 glibc = (ROOT / 'glibc' / 'recipe.yml').read_text(encoding='utf-8')
 required_glibc_fragments = (
-    '  release: 5',
+    '  release: 6',
     'C.UTF-8',
     '"$PKG_DESTDIR/usr/bin/localedef"',
     '--prefix="$PKG_DESTDIR"',
@@ -82,6 +82,15 @@ required_glibc_fragments = (
 for fragment in required_glibc_fragments:
     if fragment not in glibc:
         fail(f'glibc does not close C.UTF-8 authority: missing {fragment!r}')
+run_match = re.search(
+    r'^  run:\n((?:    - package: [^\s]+\n)+)', glibc, re.MULTILINE)
+if run_match is None:
+    fail('glibc omits runtime authority')
+glibc_run = re.findall(r'^    - package: ([^\s]+)$', run_match.group(1), re.MULTILINE)
+if glibc_run != ['filesystem', 'libgcc']:
+    fail(
+        'glibc runtime authority must be exactly filesystem, libgcc; got ' +
+        ', '.join(glibc_run))
 if 'localedef failed (non-fatal)' in glibc or 'localedef ||' in glibc:
     fail('glibc C.UTF-8 creation became best-effort')
 if 'rmdir "$PKG_DESTDIR/usr/share/locale"' in glibc:
