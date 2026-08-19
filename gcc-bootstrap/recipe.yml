@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: gcc-bootstrap
   version: 16.1.0
-  release: 3
+  release: 4
   summary: GCC C and C++ construction compiler authority
   homepage: https://gcc.gnu.org/
   licenses:
@@ -161,6 +161,44 @@ build:
     rm -rf "$PKG_DESTDIR/usr/share"
     find "$PKG_DESTDIR" -type f -name '*.la' -delete
 
+    # GCC's x86_64 target-library install uses the OS multilib spelling
+    # /usr/lib64 even with one admitted 64-bit variant.  filesystem owns that
+    # merged-/usr alias; the bootstrap compiler owns only the static objects.
+    # Normalize the staged objects into canonical /usr/lib before sealing the
+    # image, and refuse rather than overwrite any independently installed object.
+    normalize_lib_alias()
+    {
+      alias=$1
+      source="$PKG_DESTDIR/$alias"
+      [ ! -L "$source" ] || fail "package payload unexpectedly owns alias symlink $alias"
+      [ -d "$source" ] || return 0
+      mkdir -p "$PKG_DESTDIR/usr/lib"
+      for path in "$source"/*; do
+        [ -e "$path" ] || [ -L "$path" ] || continue
+        [ ! -d "$path" ] || [ -L "$path" ] ||
+          fail "unexpected directory below $alias: ${path##*/}"
+        target="$PKG_DESTDIR/usr/lib/${path##*/}"
+        [ ! -e "$target" ] && [ ! -L "$target" ] ||
+          fail "canonical library collision while normalizing $alias: ${path##*/}"
+        mv "$path" "$target"
+      done
+      rmdir "$source"
+    }
+    normalize_lib_alias usr/lib64
+
+    # No construction package may publish below aliases owned by filesystem.
+    for alias in bin sbin lib lib32 lib64 usr/lib64; do
+      path="$PKG_DESTDIR/$alias"
+      [ ! -L "$path" ] || fail "final payload owns merged-/usr alias $alias"
+      if [ -d "$path" ]; then
+        if find "$path" -mindepth 1 -print -quit | grep . >/dev/null; then
+          fail "final payload retains merged-/usr descendants below $alias"
+        fi
+        rmdir "$path"
+      fi
+      [ ! -e "$path" ] || fail "final payload retains merged-/usr object $alias"
+    done
+
     # A bootstrap compiler may carry private static compiler/runtime support,
     # but it must not compete with stable libgcc or create an interim shared
     # libstdc++ runtime package. The final toolchain owns those shared ABIs.
@@ -171,8 +209,25 @@ build:
 
     test -x "$PKG_DESTDIR/usr/bin/gcc" || fail 'gcc driver is absent'
     test -x "$PKG_DESTDIR/usr/bin/g++" || fail 'g++ driver is absent'
-    ln -s gcc "$PKG_DESTDIR/usr/bin/cc"
-    ln -s g++ "$PKG_DESTDIR/usr/bin/c++"
+    ensure_driver_entry()
+    {
+      path=$1
+      target=$2
+      label=$3
+      if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+        ln -s "$target" "$path"
+      fi
+      test -x "$path" || fail "$label driver entry is absent"
+      if [ -L "$path" ]; then
+        link=$(readlink "$path")
+        case $link in
+          "$target"|"./$target") ;;
+          *) fail "$label driver entry points outside its canonical driver" ;;
+        esac
+      fi
+    }
+    ensure_driver_entry "$PKG_DESTDIR/usr/bin/cc" gcc cc
+    ensure_driver_entry "$PKG_DESTDIR/usr/bin/c++" g++ c++
 
     compiler_dir=$(find "$PKG_DESTDIR/usr/lib/gcc" -mindepth 2 -maxdepth 2 \
       -type d -name '16.1.0' -print)
@@ -187,6 +242,8 @@ build:
     test -n "$libstdcxx" || fail 'static libstdc++ construction runtime is absent'
     test "$(printf '%s\n' "$libstdcxx" | wc -l | tr -d ' ')" = 1 || \
       fail 'static libstdc++ construction runtime is ambiguous'
+    test "$libstdcxx" = "$PKG_DESTDIR/usr/lib/libstdc++.a" ||
+      fail 'static libstdc++ construction runtime is not canonical'
 
     test -x "$compiler_dir/collect2" || fail 'link driver is absent'
 
@@ -205,9 +262,14 @@ build:
           >/dev/null; then
         fail "${program##*/} retains seed/external compiler-runtime authority"
       fi
-      readelf -l "$program" | \
-        grep -F 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2' \
-        >/dev/null || fail "${program##*/} names the wrong execution loader"
+      interpreter=$(readelf -l "$program" | \
+        sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
+      case $interpreter in
+        /lib/ld-linux-x86-64.so.2|/lib64/ld-linux-x86-64.so.2|/usr/lib/ld-linux-x86-64.so.2) ;;
+        *) fail "${program##*/} names an unknown execution loader" ;;
+      esac
+      test -x "$sysroot$interpreter" ||
+        fail "${program##*/} execution loader does not resolve through admitted target root"
     done
 
     for probe in \
@@ -228,14 +290,10 @@ build:
       fail 'installed compiler does not bind linker to execution-root /usr/bin/ld'
 
     private_libgcc=$($PKG_DESTDIR/usr/bin/gcc -print-libgcc-file-name)
-    private_libstdcxx=$($PKG_DESTDIR/usr/bin/g++ -print-file-name=libstdc++.a)
+    test -f "$private_libgcc" || fail 'installed compiler private libgcc is unresolved'
     case $private_libgcc in
       "$PKG_DESTDIR"/*) ;;
       *) fail 'installed compiler resolves private libgcc outside its sealed payload' ;;
-    esac
-    case $private_libstdcxx in
-      "$PKG_DESTDIR"/*) ;;
-      *) fail 'installed compiler resolves static libstdc++ outside its sealed payload' ;;
     esac
 check:
   language: posix-shell
@@ -296,20 +354,36 @@ check:
     test -f "$check_sysroot/usr/include/linux/errno.h" ||
       fail 'composed check sysroot lost Linux UAPI authority'
 
+    # The checked package owns its static C++ target support while filesystem
+    # owns the /usr/lib64 -> lib topology through which GCC's x86_64 search
+    # convention reaches it.  Realize that exact combined target view here
+    # rather than letting the retained S0 root satisfy a compiler lookup.
+    for library in "$PKG_PACKAGE_ROOT/usr/lib/"*.a; do
+      test -f "$library" || continue
+      target="$check_sysroot/usr/lib/${library##*/}"
+      test ! -e "$target" && test ! -L "$target" ||
+        fail "check target-root static-library collision: ${library##*/}"
+      install -m 0644 "$library" "$target"
+    done
+    test -f "$check_sysroot/usr/lib/libstdc++.a" ||
+      fail 'composed check target root lacks sealed static libstdc++ authority'
+
     test "$($gcc -print-sysroot)" = / || fail 'sealed compiler sysroot differs from execution root'
     test "$($gcc -print-prog-name=as)" = /usr/bin/as || \
       fail 'sealed compiler assembler coordinate differs from /usr/bin/as'
     test "$($gcc -print-prog-name=ld)" = /usr/bin/ld || \
       fail 'sealed compiler linker coordinate differs from /usr/bin/ld'
     private_libgcc=$($gcc -print-libgcc-file-name)
-    private_libstdcxx=$($gxx -print-file-name=libstdc++.a)
+    private_libstdcxx=$($gxx --sysroot="$check_sysroot" -print-file-name=libstdc++.a)
+    test -f "$private_libgcc" || fail 'sealed compiler private libgcc is unresolved'
+    test -f "$private_libstdcxx" || fail 'sealed compiler static libstdc++ is unresolved'
     case $private_libgcc in
       "$PKG_PACKAGE_ROOT"/*) ;;
       *) fail 'sealed compiler resolves private libgcc outside its package authority' ;;
     esac
     case $private_libstdcxx in
-      "$PKG_PACKAGE_ROOT"/*) ;;
-      *) fail 'sealed compiler resolves static libstdc++ outside its package authority' ;;
+      "$check_sysroot"/*) ;;
+      *) fail 'sealed compiler resolves static libstdc++ outside admitted target root' ;;
     esac
 
     search=$($gcc -print-search-dirs)
@@ -341,6 +415,14 @@ check:
           >/dev/null; then
         fail "sealed ${program##*/} retains seed/external compiler-runtime authority"
       fi
+      interpreter=$("$binutils/readelf" -l "$program" | \
+        sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
+      case $interpreter in
+        /lib/ld-linux-x86-64.so.2|/lib64/ld-linux-x86-64.so.2|/usr/lib/ld-linux-x86-64.so.2) ;;
+        *) fail "sealed ${program##*/} names an unknown execution loader" ;;
+      esac
+      test -x "$check_sysroot$interpreter" ||
+        fail "sealed ${program##*/} execution loader does not resolve through admitted target root"
     done
 
     cat >/tmp/gcc-bootstrap-check.c <<'C'

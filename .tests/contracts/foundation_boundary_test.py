@@ -143,7 +143,7 @@ for fragment in (
 gcc_bootstrap = (ROOT / 'gcc-bootstrap' / 'recipe.yml').read_text(
     encoding='utf-8')
 for fragment in (
-        '  release: 3',
+        '  release: 4',
         '--with-sysroot=/', '--with-build-sysroot="$sysroot"',
         '--with-native-system-header-dir=/usr/include',
         '--with-as=/usr/bin/as', '--with-ld=/usr/bin/ld',
@@ -161,11 +161,20 @@ for fragment in (
         'check sysroot authority collision',
         'composed check sysroot lost /lib64 topology',
         'composed check sysroot cannot resolve the glibc loader',
+        'normalize_lib_alias usr/lib64',
+        'final payload retains merged-/usr descendants below $alias',
+        'driver entry is absent',
+        'execution loader does not resolve through admitted target root',
+        'static libstdc++ construction runtime is not canonical',
+        'composed check target root lacks sealed static libstdc++ authority',
+        'sealed compiler resolves static libstdc++ outside admitted target root',
         'sealed C compiler rejected admitted target sysroot/binutils authority',
         'sealed C++ compiler rejected admitted target sysroot/binutils authority'):
     if fragment not in gcc_bootstrap:
         fail(f'gcc bootstrap boundary omits {fragment!r}')
-for forbidden in ('download_prerequisites', '--with-system-zlib'):
+for forbidden in (
+        'download_prerequisites', '--with-system-zlib',
+        'ln -s g++ "$PKG_DESTDIR/usr/bin/c++"'):
     if forbidden in gcc_bootstrap:
         fail(f'gcc bootstrap imports ambient/upstream convenience authority: {forbidden!r}')
 

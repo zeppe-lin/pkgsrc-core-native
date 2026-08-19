@@ -143,9 +143,18 @@ build may use S0 tools, while the same compiler paths resolve to
 `binutils-bootstrap` only after the product admits a new native construction
 root. The installed compiler must use `/` as its semantic sysroot, retain no
 build-input/workspace search paths, and carry no dynamic libstdc++, libgcc,
-GMP/MPFR/MPC, or zstd dependency in its compiler frontends. Shared compiler
-runtime ABI remains outside this temporary package; final GCC/libstdc++ policy
-is a later toolchain concern. If this one-pass S0-assisted compiler cannot satisfy
+GMP/MPFR/MPC, or zstd dependency in its compiler frontends. GCC's target-library
+installer may stage the one admitted x86_64 variant through `/usr/lib64`; the
+recipe normalizes those objects into canonical `/usr/lib` and refuses to publish
+inside filesystem-owned merged-/usr aliases. Upstream-installed `cc`/`c++`
+entry points are preserved when valid rather than rewritten to a preferred
+symlink shape. The S0-built compiler executables may name `/lib`, `/lib64`, or
+canonical `/usr/lib` for the same admitted glibc loader; the invariant is that
+the coordinate resolves through the composed filesystem+glibc target root.
+Target programs emitted by the x86_64 compiler still carry the ABI
+`/lib64/ld-linux-x86-64.so.2` spelling. Shared compiler runtime ABI remains
+outside this temporary package; final GCC/libstdc++ policy is a later toolchain
+concern. If this one-pass S0-assisted compiler cannot satisfy
 those checks, the failure is evidence for an explicit earlier compiler pass; do
 not relax the checks or import more seed paths to preserve this provisional shape.
 
