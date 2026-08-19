@@ -1,0 +1,305 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: gcc-bootstrap
+  version: 16.1.0
+  release: 1
+  summary: GCC C and C++ construction compiler authority
+  homepage: https://gcc.gnu.org/
+  licenses:
+    - GPL-3.0-or-later WITH GCC-exception-3.1
+requirements:
+  build:
+    - package: glibc
+    - package: gmp-bootstrap
+    - package: mpfr-bootstrap
+    - package: mpc-bootstrap
+  check:
+    - package: glibc
+    - package: binutils-bootstrap
+  run:
+    - package: glibc
+    - package: binutils-bootstrap
+sources:
+  - url: https://ftp.gnu.org/gnu/gcc/gcc-16.1.0/gcc-16.1.0.tar.xz
+    name: gcc-16.1.0.tar.xz
+    unpack: archive
+    sha256: 50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79
+build:
+  language: posix-shell
+  script: |
+    set -eu
+    LC_ALL=C
+    export LC_ALL
+
+    fail()
+    {
+      printf '%s\n' "gcc-bootstrap: $*" >&2
+      exit 1
+    }
+
+    sysroot="$PKG_BUILD_INPUT_ROOT/glibc"
+    gmp="$PKG_BUILD_INPUT_ROOT/gmp-bootstrap"
+    mpfr="$PKG_BUILD_INPUT_ROOT/mpfr-bootstrap"
+    mpc="$PKG_BUILD_INPUT_ROOT/mpc-bootstrap"
+
+    test -f "$sysroot/usr/include/gnu/stubs.h" || fail 'final glibc headers are absent'
+    test -f "$sysroot/usr/lib/crt1.o" || fail 'final glibc start files are absent'
+    test -f "$sysroot/usr/lib/libc.so" || fail 'final glibc linker authority is absent'
+    test -e "$sysroot/usr/lib/ld-linux-x86-64.so.2" || fail 'final glibc loader is absent'
+
+    arithmetic="$PKG_BUILD_ROOT/gcc-bootstrap-arithmetic"
+    mkdir -p "$arithmetic/include" "$arithmetic/lib"
+    for header in \
+        "$gmp/usr/include/gmp.h" \
+        "$mpfr/usr/include/mpfr.h" \
+        "$mpc/usr/include/mpc.h"; do
+      test -f "$header" || fail "arithmetic header is absent: ${header##*/}"
+      install -m 0644 "$header" "$arithmetic/include/${header##*/}"
+    done
+    for library in \
+        "$gmp/usr/lib/libgmp.a" \
+        "$mpfr/usr/lib/libmpfr.a" \
+        "$mpc/usr/lib/libmpc.a"; do
+      test -f "$library" || fail "static arithmetic library is absent: ${library##*/}"
+      install -m 0644 "$library" "$arithmetic/lib/${library##*/}"
+    done
+
+    mkdir gcc-bootstrap-build
+    cd gcc-bootstrap-build
+
+    ../gcc-16.1.0/configure \
+      --prefix=/usr \
+      --libdir=/usr/lib \
+      --libexecdir=/usr/lib \
+      --with-sysroot=/ \
+      --with-build-sysroot="$sysroot" \
+      --with-native-system-header-dir=/usr/include \
+      --with-gmp="$arithmetic" \
+      --with-mpfr="$arithmetic" \
+      --with-mpc="$arithmetic" \
+      --with-as=/usr/bin/as \
+      --with-ld=/usr/bin/ld \
+      --disable-bootstrap \
+      --disable-fixincludes \
+      --disable-libgomp \
+      --disable-libquadmath \
+      --disable-libsanitizer \
+      --disable-libssp \
+      --disable-libstdcxx-pch \
+      --disable-libvtv \
+      --disable-lto \
+      --disable-multilib \
+      --disable-nls \
+      --disable-shared \
+      --disable-werror \
+      --enable-languages=c,c++ \
+      --enable-threads=posix \
+      --without-isl \
+      --without-zstd \
+      MAKEINFO=missing
+
+    # This is a seed-built handoff compiler, not final GCC. Build only the C/C++
+    # compiler machinery and the static target support required to make it a
+    # self-contained construction capability after S0 execution is revoked.
+    make -j "$PKG_JOBS" all-gcc
+    make -j "$PKG_JOBS" all-target-libgcc
+    make -j "$PKG_JOBS" all-target-libstdc++-v3
+    make DESTDIR="$PKG_DESTDIR" install-gcc
+    make DESTDIR="$PKG_DESTDIR" install-target-libgcc
+    make DESTDIR="$PKG_DESTDIR" install-target-libstdc++-v3
+
+    rm -rf "$PKG_DESTDIR/usr/share"
+    find "$PKG_DESTDIR" -type f -name '*.la' -delete
+
+    # A bootstrap compiler may carry private static compiler/runtime support,
+    # but it must not compete with stable libgcc or create an interim shared
+    # libstdc++ runtime package. The final toolchain owns those shared ABIs.
+    if find "$PKG_DESTDIR" -type f -o -type l | \
+        grep -E '/(libgcc_s|libstdc\+\+)\.so([.]|$)' >/dev/null; then
+      fail 'shared compiler runtime escaped into bootstrap compiler payload'
+    fi
+
+    test -x "$PKG_DESTDIR/usr/bin/gcc" || fail 'gcc driver is absent'
+    test -x "$PKG_DESTDIR/usr/bin/g++" || fail 'g++ driver is absent'
+    ln -s gcc "$PKG_DESTDIR/usr/bin/cc"
+    ln -s g++ "$PKG_DESTDIR/usr/bin/c++"
+
+    compiler_dir=$(find "$PKG_DESTDIR/usr/lib/gcc" -mindepth 2 -maxdepth 2 \
+      -type d -name '16.1.0' -print)
+    test -n "$compiler_dir" || fail 'compiler private directory is absent'
+    test "$(printf '%s\n' "$compiler_dir" | wc -l | tr -d ' ')" = 1 || \
+      fail 'compiler private directory is ambiguous'
+    test -x "$compiler_dir/cc1" || fail 'C frontend is absent'
+    test -x "$compiler_dir/cc1plus" || fail 'C++ frontend is absent'
+    test -f "$compiler_dir/libgcc.a" || fail 'private static libgcc is absent'
+
+    libstdcxx=$(find "$PKG_DESTDIR/usr" -type f -name 'libstdc++.a' -print)
+    test -n "$libstdcxx" || fail 'static libstdc++ construction runtime is absent'
+    test "$(printf '%s\n' "$libstdcxx" | wc -l | tr -d ' ')" = 1 || \
+      fail 'static libstdc++ construction runtime is ambiguous'
+
+    test -x "$compiler_dir/collect2" || fail 'link driver is absent'
+
+    for program in \
+        "$PKG_DESTDIR/usr/bin/gcc" \
+        "$PKG_DESTDIR/usr/bin/g++" \
+        "$compiler_dir/cc1" \
+        "$compiler_dir/cc1plus" \
+        "$compiler_dir/collect2"; do
+      dynamic=$(readelf -d "$program") || fail "readelf rejected ${program##*/}"
+      if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+        fail "${program##*/} carries a construction search path"
+      fi
+      if printf '%s\n' "$dynamic" | grep -E \
+          'Shared library: \[(libstdc\+\+|libgcc_s|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
+          >/dev/null; then
+        fail "${program##*/} retains seed/external compiler-runtime authority"
+      fi
+      readelf -l "$program" | \
+        grep -F 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2' \
+        >/dev/null || fail "${program##*/} names the wrong execution loader"
+    done
+
+    for probe in \
+        "$PKG_DESTDIR/usr/bin/gcc -print-search-dirs" \
+        "$PKG_DESTDIR/usr/bin/gcc -dumpspecs"; do
+      # shellcheck disable=SC2086
+      output=$($probe)
+      if printf '%s\n' "$output" | grep -E '/build/(inputs|work)|seed-root' >/dev/null; then
+        fail 'installed compiler search authority retains bootstrap coordinates'
+      fi
+    done
+
+    test "$($PKG_DESTDIR/usr/bin/gcc -print-sysroot)" = / || \
+      fail 'installed compiler does not use the execution root as sysroot'
+    test "$($PKG_DESTDIR/usr/bin/gcc -print-prog-name=as)" = /usr/bin/as || \
+      fail 'installed compiler does not bind assembler to execution-root /usr/bin/as'
+    test "$($PKG_DESTDIR/usr/bin/gcc -print-prog-name=ld)" = /usr/bin/ld || \
+      fail 'installed compiler does not bind linker to execution-root /usr/bin/ld'
+
+    private_libgcc=$($PKG_DESTDIR/usr/bin/gcc -print-libgcc-file-name)
+    private_libstdcxx=$($PKG_DESTDIR/usr/bin/g++ -print-file-name=libstdc++.a)
+    case $private_libgcc in
+      "$PKG_DESTDIR"/*) ;;
+      *) fail 'installed compiler resolves private libgcc outside its sealed payload' ;;
+    esac
+    case $private_libstdcxx in
+      "$PKG_DESTDIR"/*) ;;
+      *) fail 'installed compiler resolves static libstdc++ outside its sealed payload' ;;
+    esac
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "gcc-bootstrap check: $*" >&2
+      exit 1
+    }
+
+    [ "$(sha256sum "$PKG_SOURCE_ROOT/gcc-16.1.0.tar.xz" | awk '{print $1}')" = \
+      50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79 ] || \
+      fail 'retained GCC source digest differs from admission'
+
+    gcc="$PKG_PACKAGE_ROOT/usr/bin/gcc"
+    gxx="$PKG_PACKAGE_ROOT/usr/bin/g++"
+    glibc="$PKG_CHECK_INPUT_ROOT/glibc"
+    binutils="$PKG_CHECK_INPUT_ROOT/binutils-bootstrap/usr/bin"
+
+    test -x "$gcc" || fail 'sealed gcc driver is absent'
+    test -x "$gxx" || fail 'sealed g++ driver is absent'
+    test -x "$binutils/as" || fail 'admitted assembler is absent'
+    test -x "$binutils/ld" || fail 'admitted linker is absent'
+    test -x "$binutils/readelf" || fail 'admitted ELF inspector is absent'
+    test -x "$glibc/usr/lib/ld-linux-x86-64.so.2" || fail 'admitted glibc loader is absent'
+
+    test "$($gcc -print-sysroot)" = / || fail 'sealed compiler sysroot differs from execution root'
+    test "$($gcc -print-prog-name=as)" = /usr/bin/as || \
+      fail 'sealed compiler assembler coordinate differs from /usr/bin/as'
+    test "$($gcc -print-prog-name=ld)" = /usr/bin/ld || \
+      fail 'sealed compiler linker coordinate differs from /usr/bin/ld'
+    private_libgcc=$($gcc -print-libgcc-file-name)
+    private_libstdcxx=$($gxx -print-file-name=libstdc++.a)
+    case $private_libgcc in
+      "$PKG_PACKAGE_ROOT"/*) ;;
+      *) fail 'sealed compiler resolves private libgcc outside its package authority' ;;
+    esac
+    case $private_libstdcxx in
+      "$PKG_PACKAGE_ROOT"/*) ;;
+      *) fail 'sealed compiler resolves static libstdc++ outside its package authority' ;;
+    esac
+
+    search=$($gcc -print-search-dirs)
+    specs=$($gcc -dumpspecs)
+    if printf '%s\n%s\n' "$search" "$specs" | \
+        grep -E '/build/(inputs|work)|seed-root' >/dev/null; then
+      fail 'sealed compiler search authority retains bootstrap coordinates'
+    fi
+
+    compiler_dir=$(find "$PKG_PACKAGE_ROOT/usr/lib/gcc" -mindepth 2 -maxdepth 2 \
+      -type d -name '16.1.0' -print)
+    test -n "$compiler_dir" || fail 'sealed compiler private directory is absent'
+    test "$(printf '%s\n' "$compiler_dir" | wc -l | tr -d ' ')" = 1 || \
+      fail 'sealed compiler private directory is ambiguous'
+    test -x "$compiler_dir/collect2" || fail 'sealed link driver is absent'
+    for program in \
+        "$gcc" \
+        "$gxx" \
+        "$compiler_dir/cc1" \
+        "$compiler_dir/cc1plus" \
+        "$compiler_dir/collect2"; do
+      test -x "$program" || fail "sealed compiler program is absent: ${program##*/}"
+      dynamic=$("$binutils/readelf" -d "$program") || fail "readelf rejected sealed ${program##*/}"
+      if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+        fail "sealed ${program##*/} carries a construction search path"
+      fi
+      if printf '%s\n' "$dynamic" | grep -E \
+          'Shared library: \[(libstdc\+\+|libgcc_s|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
+          >/dev/null; then
+        fail "sealed ${program##*/} retains seed/external compiler-runtime authority"
+      fi
+    done
+
+    cat >/tmp/gcc-bootstrap-check.c <<'C'
+    #include <stdio.h>
+    int main(void)
+    {
+      return puts("gcc-bootstrap-c") < 0;
+    }
+    C
+    "$gcc" -std=c11 --sysroot="$glibc" -B"$binutils/" \
+      /tmp/gcc-bootstrap-check.c -o /tmp/gcc-bootstrap-check-c || \
+      fail 'sealed C compiler rejected admitted glibc/binutils authority'
+
+    cat >/tmp/gcc-bootstrap-check.cpp <<'CXX'
+    #include <cstdio>
+    int main()
+    {
+      return std::puts("gcc-bootstrap-cxx") < 0;
+    }
+    CXX
+    "$gxx" -std=c++14 --sysroot="$glibc" -B"$binutils/" \
+      /tmp/gcc-bootstrap-check.cpp -o /tmp/gcc-bootstrap-check-cxx || \
+      fail 'sealed C++ compiler rejected admitted glibc/binutils authority'
+
+    for binary in /tmp/gcc-bootstrap-check-c /tmp/gcc-bootstrap-check-cxx; do
+      "$binutils/readelf" -l "$binary" | \
+        grep -F 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2' \
+        >/dev/null || fail 'compiled witness names the wrong target loader'
+      dynamic=$("$binutils/readelf" -d "$binary") || fail 'readelf rejected compiled witness'
+      if printf '%s\n' "$dynamic" | \
+          grep -E 'Shared library: \[(libstdc\+\+|libgcc_s|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
+          >/dev/null; then
+        fail 'bootstrap witness retained a forbidden shared compiler-runtime edge'
+      fi
+      "$glibc/usr/lib/ld-linux-x86-64.so.2" \
+        --library-path "$glibc/usr/lib" "$binary" >/dev/null || \
+        fail 'compiled witness does not execute through admitted glibc authority'
+    done
+architectures:
+  build: [x86_64]
+  target: [x86_64]

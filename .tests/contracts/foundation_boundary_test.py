@@ -19,6 +19,7 @@ expected_recipes = {
     'filesystem',
     'glibc',
     'glibc-bootstrap',
+    'gcc-bootstrap',
     'gmp-bootstrap',
     'libgcc',
     'linux-api-headers',
@@ -57,7 +58,8 @@ profile_members = re.findall(r'^\s+- package: ([^\s]+)$', profiles, re.MULTILINE
 if profile_members != ['filesystem', 'glibc', 'libgcc']:
     fail('@foundation must contain exactly filesystem, glibc, libgcc')
 for construction_only in (
-        'binutils-bootstrap', 'linux-api-headers', 'glibc-bootstrap',
+        'binutils-bootstrap', 'gcc-bootstrap', 'linux-api-headers',
+        'glibc-bootstrap',
         'gmp-bootstrap', 'mpc-bootstrap', 'mpfr-bootstrap'):
     if construction_only in profile_members:
         fail(f'construction-only package {construction_only} became deployable profile state')
@@ -107,6 +109,13 @@ bootstrap_authority = {
         'check': [],
         'run': ['glibc'],
     },
+    'gcc-bootstrap': {
+        'version': '16.1.0',
+        'sha256': '50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79',
+        'build': ['glibc', 'gmp-bootstrap', 'mpfr-bootstrap', 'mpc-bootstrap'],
+        'check': ['glibc', 'binutils-bootstrap'],
+        'run': ['glibc', 'binutils-bootstrap'],
+    },
 }
 for name, authority in bootstrap_authority.items():
     text = (ROOT / name / 'recipe.yml').read_text(encoding='utf-8')
@@ -131,6 +140,26 @@ for fragment in (
         'optional external support-library dependency'):
     if fragment not in binutils_bootstrap:
         fail(f'binutils bootstrap boundary omits {fragment!r}')
+gcc_bootstrap = (ROOT / 'gcc-bootstrap' / 'recipe.yml').read_text(
+    encoding='utf-8')
+for fragment in (
+        '--with-sysroot=/', '--with-build-sysroot="$sysroot"',
+        '--with-native-system-header-dir=/usr/include',
+        '--with-as=/usr/bin/as', '--with-ld=/usr/bin/ld',
+        '--disable-bootstrap', '--disable-fixincludes', '--disable-lto',
+        '--disable-multilib', '--disable-shared', '--enable-languages=c,c++',
+        'all-target-libgcc', 'all-target-libstdc++-v3',
+        'shared compiler runtime escaped into bootstrap compiler payload',
+        'installed compiler search authority retains bootstrap coordinates',
+        'installed compiler does not use the execution root as sysroot',
+        'sealed C compiler rejected admitted glibc/binutils authority',
+        'sealed C++ compiler rejected admitted glibc/binutils authority'):
+    if fragment not in gcc_bootstrap:
+        fail(f'gcc bootstrap boundary omits {fragment!r}')
+for forbidden in ('download_prerequisites', '--with-system-zlib'):
+    if forbidden in gcc_bootstrap:
+        fail(f'gcc bootstrap imports ambient/upstream convenience authority: {forbidden!r}')
+
 for name, soname in (
         ('gmp-bootstrap', 'libgmp.so.10'),
         ('mpfr-bootstrap', 'libmpfr.so.6'),

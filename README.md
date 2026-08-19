@@ -116,11 +116,14 @@ filesystem ---------------------> glibc
 
 glibc -> gmp-bootstrap -> mpfr-bootstrap -> mpc-bootstrap
    `--> binutils-bootstrap
+
+glibc + GMP/MPFR/MPC --build--> gcc-bootstrap
+gcc-bootstrap --run--> glibc + binutils-bootstrap
 ```
 
-`glibc-bootstrap`, `gmp-bootstrap`, `mpfr-bootstrap`, `mpc-bootstrap`, and
-`binutils-bootstrap` are construction authority only. None is an alternate
-stable runtime package, a deployable root member, or a system-product profile.
+`glibc-bootstrap`, `gmp-bootstrap`, `mpfr-bootstrap`, `mpc-bootstrap`,
+`binutils-bootstrap`, and `gcc-bootstrap` are construction authority only. None is
+an alternate stable runtime package, a deployable root member, or a system-product profile.
 The multiprecision chain deliberately retains both shared runtime and static
 construction surfaces: a later native GCC construction node must be able to
 consume exact admitted headers/libraries without borrowing the historical
@@ -128,6 +131,21 @@ seed's arithmetic libraries. `binutils-bootstrap` is narrower than a final
 Binutils distribution package: only the assembler/linker/archive/ELF tools
 required by the construction capability contract survive into its payload, and
 optional zlib, zstd, libelf, Jansson, gold, and gprofng authority is excluded.
+
+`gcc-bootstrap` is the first compiler-side handoff sensor. It consumes final
+`glibc` plus exact static GMP/MPFR/MPC build inputs, installs C and C++ compiler
+machinery with static target compiler support, and names `/usr/bin/as` and
+`/usr/bin/ld` as execution-root coordinates. Binutils is consequently runtime
+construction authority rather than a fake build-order edge: the S0-assisted
+build may use S0 tools, while the same compiler paths resolve to
+`binutils-bootstrap` only after the product admits a new native construction
+root. The installed compiler must use `/` as its semantic sysroot, retain no
+build-input/workspace search paths, and carry no dynamic libstdc++, libgcc,
+GMP/MPFR/MPC, or zstd dependency in its compiler frontends. Shared compiler
+runtime ABI remains outside this temporary package; final GCC/libstdc++ policy
+is a later toolchain concern. If this one-pass S0-assisted compiler cannot satisfy
+those checks, the failure is evidence for an explicit earlier compiler pass; do
+not relax the checks or import more seed paths to preserve this provisional shape.
 
 These recipes do not yet constitute a complete seed-independent construction
 root, so this collection intentionally does **not** publish an `@construction`

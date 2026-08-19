@@ -18,12 +18,17 @@ It then requires `@foundation` to contain only the stable deployable
 construction-only package into that profile.
 
 The first Stage-B seed-retirement substrate is also source-qualified. Exact
-GMP/MPFR/MPC/Binutils coordinates and source digests are pinned; the
+GMP/MPFR/MPC/Binutils/GCC coordinates and source digests are pinned; the
 GMP -> MPFR -> MPC direct build/check/runtime edges are checked independently;
 and Binutils must remain a narrow construction payload without zlib, zstd,
 libelf, Jansson, libstdc++, gprofng, or persistent build-path authority. The
 multiprecision packages must retain the ABI SONAME and static construction
-surfaces needed by a later compiler-bootstrap node. The contract deliberately
+surfaces consumed by `gcc-bootstrap`. The compiler-bootstrap contract then
+requires a final-glibc build sysroot, explicit execution-root assembler/linker
+coordinates, C/C++ plus static target support, no LTO/shared bootstrap runtime,
+no retained build/seed search coordinates, and direct check witnesses compiled
+with the exact admitted glibc and Binutils inputs. This still does not create a
+complete shell/userspace execution universe, so the contract deliberately
 rejects an `@construction` profile while this closure remains incomplete.
 
 Final glibc is still required to fail closed while installing the exact
