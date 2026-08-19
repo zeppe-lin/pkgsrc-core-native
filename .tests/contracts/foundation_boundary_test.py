@@ -15,11 +15,15 @@ def fail(message: str) -> None:
 
 
 expected_recipes = {
+    'binutils-bootstrap',
     'filesystem',
     'glibc',
     'glibc-bootstrap',
+    'gmp-bootstrap',
     'libgcc',
     'linux-api-headers',
+    'mpc-bootstrap',
+    'mpfr-bootstrap',
 }
 visible_dirs = {
     path.name
@@ -52,13 +56,91 @@ profiles = (ROOT / 'profiles.yml').read_text(encoding='utf-8')
 profile_members = re.findall(r'^\s+- package: ([^\s]+)$', profiles, re.MULTILINE)
 if profile_members != ['filesystem', 'glibc', 'libgcc']:
     fail('@foundation must contain exactly filesystem, glibc, libgcc')
-for construction_only in ('linux-api-headers', 'glibc-bootstrap'):
+for construction_only in (
+        'binutils-bootstrap', 'linux-api-headers', 'glibc-bootstrap',
+        'gmp-bootstrap', 'mpc-bootstrap', 'mpfr-bootstrap'):
     if construction_only in profile_members:
         fail(f'construction-only package {construction_only} became deployable profile state')
+if re.search(r'^  construction:', profiles, re.MULTILINE):
+    fail('partial seed-retirement substrate was prematurely admitted as @construction')
 
-for misplaced in ('acl', 'attr', 'lz4', 'xz', 'zlib', 'zstd'):
+for misplaced in ('acl', 'attr', 'lz4', 'zlib', 'zstd'):
     if (ROOT / misplaced / 'recipe.yml').exists():
         fail(f'unproven non-foundation recipe {misplaced} returned below the seed boundary')
+
+
+def scope_packages(text: str, scope: str) -> list[str]:
+    match = re.search(
+        rf'^  {scope}:\n((?:    - package: [^\s]+\n)+)', text, re.MULTILINE)
+    if match is None:
+        return []
+    return re.findall(
+        r'^    - package: ([^\s]+)$', match.group(1), re.MULTILINE)
+
+
+bootstrap_authority = {
+    'gmp-bootstrap': {
+        'version': '6.3.0',
+        'sha256': 'a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898',
+        'build': [],
+        'check': [],
+        'run': ['glibc'],
+    },
+    'mpfr-bootstrap': {
+        'version': '4.2.2',
+        'sha256': 'b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01',
+        'build': ['gmp-bootstrap'],
+        'check': ['gmp-bootstrap'],
+        'run': ['glibc', 'gmp-bootstrap'],
+    },
+    'mpc-bootstrap': {
+        'version': '1.4.1',
+        'sha256': '91204cd32f164bd3b7c992d4a6a8ce6519511aadab30f78b6982d0bf8d73e931',
+        'build': ['gmp-bootstrap', 'mpfr-bootstrap'],
+        'check': ['gmp-bootstrap', 'mpfr-bootstrap'],
+        'run': ['glibc', 'gmp-bootstrap', 'mpfr-bootstrap'],
+    },
+    'binutils-bootstrap': {
+        'version': '2.44',
+        'sha256': 'ce2017e059d63e67ddb9240e9d4ec49c2893605035cd60e92ad53177f4377237',
+        'build': [],
+        'check': [],
+        'run': ['glibc'],
+    },
+}
+for name, authority in bootstrap_authority.items():
+    text = (ROOT / name / 'recipe.yml').read_text(encoding='utf-8')
+    version = re.search(r'^  version: ([^\s]+)$', text, re.MULTILINE)
+    if version is None or version.group(1) != authority['version']:
+        fail(f'{name} version differs from admitted construction coordinate')
+    if f"    sha256: {authority['sha256']}" not in text:
+        fail(f'{name} source SHA-256 differs from admitted construction source')
+    for scope in ('build', 'check', 'run'):
+        actual = scope_packages(text, scope)
+        if actual != authority[scope]:
+            fail(
+                f'{name} {scope} authority differs: expected ' +
+                ', '.join(authority[scope]) + '; got ' + ', '.join(actual))
+
+binutils_bootstrap = (ROOT / 'binutils-bootstrap' / 'recipe.yml').read_text(
+    encoding='utf-8')
+for fragment in (
+        '--disable-gprofng', '--disable-jansson', '--disable-shared',
+        '--without-debuginfod', '--without-system-zlib', '--without-zstd',
+        'ar as ld nm objcopy objdump ranlib readelf strip',
+        'optional external support-library dependency'):
+    if fragment not in binutils_bootstrap:
+        fail(f'binutils bootstrap boundary omits {fragment!r}')
+for name, soname in (
+        ('gmp-bootstrap', 'libgmp.so.10'),
+        ('mpfr-bootstrap', 'libmpfr.so.6'),
+        ('mpc-bootstrap', 'libmpc.so.3')):
+    text = (ROOT / name / 'recipe.yml').read_text(encoding='utf-8')
+    for fragment in (
+            soname, 'static construction library is absent',
+            'carries a construction search path'):
+        if fragment not in text:
+            fail(f'{name} does not defend construction library authority: {fragment!r}')
 
 glibc = (ROOT / 'glibc' / 'recipe.yml').read_text(encoding='utf-8')
 required_glibc_fragments = (

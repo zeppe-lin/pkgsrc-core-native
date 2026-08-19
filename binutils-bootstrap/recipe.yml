@@ -1,0 +1,121 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: binutils-bootstrap
+  version: 2.44
+  release: 1
+  summary: GNU binary utilities construction authority
+  homepage: https://www.gnu.org/software/binutils/
+  licenses:
+    - GPL-3.0-or-later
+requirements:
+  run:
+    - package: glibc
+sources:
+  - url: https://ftp.gnu.org/gnu/binutils/binutils-2.44.tar.xz
+    name: binutils-2.44.tar.xz
+    unpack: archive
+    sha256: ce2017e059d63e67ddb9240e9d4ec49c2893605035cd60e92ad53177f4377237
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "binutils-bootstrap: $*" >&2
+      exit 1
+    }
+
+    mkdir binutils-bootstrap-build binutils-bootstrap-tools
+    cd binutils-bootstrap-build
+
+    ../binutils-2.44/configure \
+      --prefix=/usr \
+      --disable-gprofng \
+      --disable-jansson \
+      --disable-nls \
+      --disable-shared \
+      --disable-werror \
+      --enable-64-bit-bfd \
+      --enable-default-hash-style=gnu \
+      --enable-new-dtags \
+      --without-debuginfod \
+      --without-system-zlib \
+      --without-zstd
+
+    make -j "$PKG_JOBS" tooldir=/usr
+    make tooldir=/usr DESTDIR="$PKG_DESTDIR" install
+
+    tools=$(CDPATH= cd -- ../binutils-bootstrap-tools && pwd)
+    for tool in ar as ld nm objcopy objdump ranlib readelf strip; do
+      source="$PKG_DESTDIR/usr/bin/$tool"
+      test -x "$source" || fail "required tool is absent: $tool"
+      install -m 0755 "$source" "$tools/$tool"
+    done
+
+    rm -rf "$PKG_DESTDIR/usr"
+    mkdir -p "$PKG_DESTDIR/usr/bin"
+    for tool in ar as ld nm objcopy objdump ranlib readelf strip; do
+      install -m 0755 "$tools/$tool" "$PKG_DESTDIR/usr/bin/$tool"
+    done
+
+    for tool in ar as ld nm objcopy objdump ranlib readelf strip; do
+      dynamic=$(readelf -d "$PKG_DESTDIR/usr/bin/$tool") || \
+        fail "readelf rejected $tool"
+      if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+        fail "$tool carries a construction search path"
+      fi
+      if printf '%s\n' "$dynamic" | \
+          grep -E 'Shared library: \[(libzstd|libz|libelf|libjansson|libstdc\+\+)' >/dev/null; then
+        fail "$tool retained an optional external support-library dependency"
+      fi
+    done
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "binutils-bootstrap check: $*" >&2
+      exit 1
+    }
+
+    [ "$(sha256sum "$PKG_SOURCE_ROOT/binutils-2.44.tar.xz" | awk '{print $1}')" = \
+      ce2017e059d63e67ddb9240e9d4ec49c2893605035cd60e92ad53177f4377237 ] || \
+      fail 'retained Binutils source digest differs from admission'
+
+    bindir="$PKG_PACKAGE_ROOT/usr/bin"
+    for tool in ar as ld nm objcopy objdump ranlib readelf strip; do
+      test -x "$bindir/$tool" || fail "sealed tool is absent: $tool"
+      "$bindir/$tool" --version >/dev/null || fail "sealed tool did not execute: $tool"
+      dynamic=$(readelf -d "$bindir/$tool") || fail "readelf rejected sealed $tool"
+      if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+        fail "sealed $tool carries a construction search path"
+      fi
+      if printf '%s\n' "$dynamic" | \
+          grep -E 'Shared library: \[(libzstd|libz|libelf|libjansson|libstdc\+\+)' >/dev/null; then
+        fail "sealed $tool retained an optional external support-library dependency"
+      fi
+    done
+
+    cat >/tmp/binutils-bootstrap-check.s <<'ASM'
+    .global _start
+    _start:
+      mov $60, %rax
+      xor %rdi, %rdi
+      syscall
+    ASM
+    "$bindir/as" -o /tmp/binutils-bootstrap-check.o /tmp/binutils-bootstrap-check.s || \
+      fail 'sealed assembler rejected x86_64 input'
+    "$bindir/ld" -o /tmp/binutils-bootstrap-check /tmp/binutils-bootstrap-check.o || \
+      fail 'sealed linker rejected assembler output'
+    "$bindir/readelf" -h /tmp/binutils-bootstrap-check >/dev/null || \
+      fail 'sealed readelf rejected linked output'
+    /tmp/binutils-bootstrap-check || fail 'sealed assembler/linker output did not execute'
+architectures:
+  build: [x86_64]
+  target: [x86_64]

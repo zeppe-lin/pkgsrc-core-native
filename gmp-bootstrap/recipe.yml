@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: gmp-bootstrap
+  version: 6.3.0
+  release: 1
+  summary: GMP construction arithmetic authority
+  homepage: https://gmplib.org/
+  licenses:
+    - GPL-2.0-or-later OR LGPL-3.0-or-later
+requirements:
+  run:
+    - package: glibc
+sources:
+  - url: https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+    name: gmp-6.3.0.tar.xz
+    unpack: archive
+    sha256: a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "gmp-bootstrap: $*" >&2
+      exit 1
+    }
+
+    mkdir gmp-bootstrap-build
+    cd gmp-bootstrap-build
+
+    ../gmp-6.3.0/configure \
+      --prefix=/usr \
+      --build=x86_64-unknown-linux-gnu \
+      --disable-assert
+
+    make -j "$PKG_JOBS"
+    make DESTDIR="$PKG_DESTDIR" install
+
+    rm -rf "$PKG_DESTDIR/usr/share"
+    rm -f "$PKG_DESTDIR/usr/lib/"*.la
+
+    test -f "$PKG_DESTDIR/usr/include/gmp.h" || fail 'gmp.h is absent'
+    test -f "$PKG_DESTDIR/usr/lib/libgmp.a" || fail 'static construction library is absent'
+    library=$(find "$PKG_DESTDIR/usr/lib" -maxdepth 1 -type f \
+      -name 'libgmp.so.*' -print)
+    test -n "$library" || fail 'shared construction library is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'shared construction library is ambiguous'
+
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected libgmp'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgmp.so.10]' >/dev/null || \
+      fail 'libgmp SONAME differs from admitted ABI'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'libgmp carries a construction search path'
+    fi
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "gmp-bootstrap check: $*" >&2
+      exit 1
+    }
+
+    [ "$(sha256sum "$PKG_SOURCE_ROOT/gmp-6.3.0.tar.xz" | awk '{print $1}')" = \
+      a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898 ] || \
+      fail 'retained GMP source digest differs from admission'
+
+    test -f "$PKG_PACKAGE_ROOT/usr/include/gmp.h" || fail 'gmp.h is absent'
+    library=$(find "$PKG_PACKAGE_ROOT/usr/lib" -maxdepth 1 -type f \
+      -name 'libgmp.so.*' -print)
+    test -n "$library" || fail 'libgmp shared object is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'libgmp shared object is ambiguous'
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected sealed libgmp'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libgmp.so.10]' >/dev/null || \
+      fail 'sealed libgmp SONAME differs'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'sealed libgmp carries a construction search path'
+    fi
+
+    cat >/tmp/gmp-bootstrap-check.c <<'C'
+    #include <gmp.h>
+    int main(void)
+    {
+      mpz_t value;
+      mpz_init_set_ui(value, 7);
+      mpz_add_ui(value, value, 5);
+      int okay = mpz_cmp_ui(value, 12) == 0;
+      mpz_clear(value);
+      return okay ? 0 : 1;
+    }
+    C
+    cc -I"$PKG_PACKAGE_ROOT/usr/include" \
+      /tmp/gmp-bootstrap-check.c \
+      -L"$PKG_PACKAGE_ROOT/usr/lib" -lgmp \
+      -o /tmp/gmp-bootstrap-check
+    LD_LIBRARY_PATH="$PKG_PACKAGE_ROOT/usr/lib" /tmp/gmp-bootstrap-check || \
+      fail 'sealed GMP development/runtime authority is not executable'
+architectures:
+  build: [x86_64]
+  target: [x86_64]

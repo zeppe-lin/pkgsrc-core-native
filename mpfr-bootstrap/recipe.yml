@@ -1,0 +1,126 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: mpfr-bootstrap
+  version: 4.2.2
+  release: 1
+  summary: MPFR construction arithmetic authority
+  homepage: https://www.mpfr.org/
+  licenses:
+    - LGPL-3.0-or-later
+requirements:
+  build:
+    - package: gmp-bootstrap
+  check:
+    - package: gmp-bootstrap
+  run:
+    - package: glibc
+    - package: gmp-bootstrap
+sources:
+  - url: https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz
+    name: mpfr-4.2.2.tar.xz
+    unpack: archive
+    sha256: b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "mpfr-bootstrap: $*" >&2
+      exit 1
+    }
+
+    gmp="$PKG_BUILD_INPUT_ROOT/gmp-bootstrap/usr"
+    test -f "$gmp/include/gmp.h" || fail 'GMP build header is absent'
+    test -f "$gmp/lib/libgmp.a" || fail 'GMP static construction library is absent'
+
+    mkdir mpfr-bootstrap-build
+    cd mpfr-bootstrap-build
+
+    CPPFLAGS="-I$gmp/include" \
+    LDFLAGS="-L$gmp/lib" \
+    LD_LIBRARY_PATH="$gmp/lib" \
+      ../mpfr-4.2.2/configure \
+        --prefix=/usr \
+        --with-gmp="$gmp" \
+        --enable-thread-safe
+
+    LD_LIBRARY_PATH="$gmp/lib" make -j "$PKG_JOBS"
+    LD_LIBRARY_PATH="$gmp/lib" make DESTDIR="$PKG_DESTDIR" install
+
+    rm -rf "$PKG_DESTDIR/usr/share"
+    rm -f "$PKG_DESTDIR/usr/lib/"*.la
+
+    test -f "$PKG_DESTDIR/usr/include/mpfr.h" || fail 'mpfr.h is absent'
+    test -f "$PKG_DESTDIR/usr/lib/libmpfr.a" || fail 'static construction library is absent'
+    library=$(find "$PKG_DESTDIR/usr/lib" -maxdepth 1 -type f \
+      -name 'libmpfr.so.*' -print)
+    test -n "$library" || fail 'shared construction library is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'shared construction library is ambiguous'
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected libmpfr'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libmpfr.so.6]' >/dev/null || \
+      fail 'libmpfr SONAME differs from admitted ABI'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgmp.so.10]' >/dev/null || \
+      fail 'libmpfr does not retain GMP runtime authority'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'libmpfr carries a construction search path'
+    fi
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "mpfr-bootstrap check: $*" >&2
+      exit 1
+    }
+
+    [ "$(sha256sum "$PKG_SOURCE_ROOT/mpfr-4.2.2.tar.xz" | awk '{print $1}')" = \
+      b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01 ] || \
+      fail 'retained MPFR source digest differs from admission'
+
+    gmp="$PKG_CHECK_INPUT_ROOT/gmp-bootstrap/usr"
+    test -f "$gmp/include/gmp.h" || fail 'GMP check header is absent'
+    library=$(find "$PKG_PACKAGE_ROOT/usr/lib" -maxdepth 1 -type f \
+      -name 'libmpfr.so.*' -print)
+    test -n "$library" || fail 'libmpfr shared object is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'libmpfr shared object is ambiguous'
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected sealed libmpfr'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libmpfr.so.6]' >/dev/null || \
+      fail 'sealed libmpfr SONAME differs'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgmp.so.10]' >/dev/null || \
+      fail 'sealed libmpfr lost GMP runtime authority'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'sealed libmpfr carries a construction search path'
+    fi
+
+    cat >/tmp/mpfr-bootstrap-check.c <<'C'
+    #include <mpfr.h>
+    int main(void)
+    {
+      mpfr_t value;
+      mpfr_init2(value, 64);
+      mpfr_set_ui(value, 7, MPFR_RNDN);
+      mpfr_add_ui(value, value, 5, MPFR_RNDN);
+      int okay = mpfr_cmp_ui(value, 12) == 0;
+      mpfr_clear(value);
+      return okay ? 0 : 1;
+    }
+    C
+    cc -I"$PKG_PACKAGE_ROOT/usr/include" -I"$gmp/include" \
+      /tmp/mpfr-bootstrap-check.c \
+      -L"$PKG_PACKAGE_ROOT/usr/lib" -L"$gmp/lib" -lmpfr -lgmp \
+      -o /tmp/mpfr-bootstrap-check
+    LD_LIBRARY_PATH="$PKG_PACKAGE_ROOT/usr/lib:$gmp/lib" \
+      /tmp/mpfr-bootstrap-check || \
+      fail 'sealed MPFR development/runtime authority is not executable'
+architectures:
+  build: [x86_64]
+  target: [x86_64]

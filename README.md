@@ -105,23 +105,43 @@ native execution namespaces. Run requirements describe target runtime closure
 and are not generic sequencing hints.
 
 The collection currently retains the bounded construction seam needed to break
-the first libc/compiler-runtime cycle:
+the first libc/compiler-runtime cycle and the first admitted pieces of the
+post-seed construction environment:
 
 ```text
 linux-api-headers -> glibc-bootstrap -> libgcc
 linux-api-headers -> glibc
 filesystem ---------------------> glibc
                                  glibc <-> libgcc   (run cohort)
+
+glibc -> gmp-bootstrap -> mpfr-bootstrap -> mpc-bootstrap
+   `--> binutils-bootstrap
 ```
 
-`glibc-bootstrap` is construction authority only. It is not an alternate libc,
-a deployable root member, or a system-product profile.
+`glibc-bootstrap`, `gmp-bootstrap`, `mpfr-bootstrap`, `mpc-bootstrap`, and
+`binutils-bootstrap` are construction authority only. None is an alternate
+stable runtime package, a deployable root member, or a system-product profile.
+The multiprecision chain deliberately retains both shared runtime and static
+construction surfaces: a later native GCC construction node must be able to
+consume exact admitted headers/libraries without borrowing the historical
+seed's arithmetic libraries. `binutils-bootstrap` is narrower than a final
+Binutils distribution package: only the assembler/linker/archive/ELF tools
+required by the construction capability contract survive into its payload, and
+optional zlib, zstd, libelf, Jansson, gold, and gprofng authority is excluded.
+
+These recipes do not yet constitute a complete seed-independent construction
+root, so this collection intentionally does **not** publish an `@construction`
+profile. Naming that profile before the shell, base utilities, compiler,
+interpreter, and remaining qualified tools exist would turn an incomplete
+artifact set into false desired-state authority.
 
 As the bootstrap graph grows, any additional `*-bootstrap` recipes must exist
 because the seed-retirement proof requires them, not because historical core or
-Linux From Scratch happened to install the corresponding final package. Optional
-compiler/linker features likewise do not justify moving support libraries below
-the boundary until an exact required construction edge proves they belong there.
+Linux From Scratch happened to install the corresponding final package. Linux
+From Scratch is useful as a bootstrap-order and dependency-pressure cross-check,
+not as package-placement authority. Optional compiler/linker features likewise
+do not justify moving support libraries below the boundary until an exact
+required construction edge proves they belong there.
 
 ## Filesystem policy
 
@@ -133,11 +153,18 @@ or rootfs composition policy.
 
 ## Scope exclusions
 
-`acl`, `attr`, `lz4`, `xz`, `zlib`, and `zstd` are ordinary system/runtime or
+`acl`, `attr`, `lz4`, `zlib`, and `zstd` remain ordinary system/runtime or
 optional toolchain-support packages rather than currently proven seed-retirement
 substrate and do not belong to this collection. Source archive compression does
 not imply an installed compression-tool dependency: archive realization is owned
 by the native source adapter.
+
+`xz` is different: the product construction capability probe now explicitly
+requires the `xz` command to compress and decompress data after seed retirement.
+That requirement—not the `.tar.xz` spelling of package sources—places an
+`xz-bootstrap` node on the forthcoming construction graph. Its recipe is deferred
+to the next construction-tool layer rather than smuggled into this first
+arithmetic/linker slice.
 
 Product qualification packages such as historical bootstrap seed/runtime probes
 are not distribution packages and do not belong here. Build/documentation tools

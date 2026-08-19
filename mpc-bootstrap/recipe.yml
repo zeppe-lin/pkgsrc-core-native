@@ -1,0 +1,137 @@
+# SPDX-FileCopyrightText: 2026 Alexandr Savca <alexandr.savca89@gmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+format: zeppe-lin.recipe/1
+package:
+  name: mpc-bootstrap
+  version: 1.4.1
+  release: 1
+  summary: MPC construction arithmetic authority
+  homepage: https://www.multiprecision.org/mpc/
+  licenses:
+    - LGPL-3.0-or-later
+requirements:
+  build:
+    - package: gmp-bootstrap
+    - package: mpfr-bootstrap
+  check:
+    - package: gmp-bootstrap
+    - package: mpfr-bootstrap
+  run:
+    - package: glibc
+    - package: gmp-bootstrap
+    - package: mpfr-bootstrap
+sources:
+  - url: https://ftp.gnu.org/gnu/mpc/mpc-1.4.1.tar.xz
+    name: mpc-1.4.1.tar.xz
+    unpack: archive
+    sha256: 91204cd32f164bd3b7c992d4a6a8ce6519511aadab30f78b6982d0bf8d73e931
+build:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "mpc-bootstrap: $*" >&2
+      exit 1
+    }
+
+    gmp="$PKG_BUILD_INPUT_ROOT/gmp-bootstrap/usr"
+    mpfr="$PKG_BUILD_INPUT_ROOT/mpfr-bootstrap/usr"
+    test -f "$gmp/include/gmp.h" || fail 'GMP build header is absent'
+    test -f "$mpfr/include/mpfr.h" || fail 'MPFR build header is absent'
+
+    mkdir mpc-bootstrap-build
+    cd mpc-bootstrap-build
+
+    CPPFLAGS="-I$gmp/include -I$mpfr/include" \
+    LDFLAGS="-L$mpfr/lib -L$gmp/lib" \
+    LD_LIBRARY_PATH="$mpfr/lib:$gmp/lib" \
+      ../mpc-1.4.1/configure \
+        --prefix=/usr \
+        --with-gmp="$gmp" \
+        --with-mpfr="$mpfr"
+
+    LD_LIBRARY_PATH="$mpfr/lib:$gmp/lib" make -j "$PKG_JOBS"
+    LD_LIBRARY_PATH="$mpfr/lib:$gmp/lib" \
+      make DESTDIR="$PKG_DESTDIR" install
+
+    rm -rf "$PKG_DESTDIR/usr/share"
+    rm -f "$PKG_DESTDIR/usr/lib/"*.la
+
+    test -f "$PKG_DESTDIR/usr/include/mpc.h" || fail 'mpc.h is absent'
+    test -f "$PKG_DESTDIR/usr/lib/libmpc.a" || fail 'static construction library is absent'
+    library=$(find "$PKG_DESTDIR/usr/lib" -maxdepth 1 -type f \
+      -name 'libmpc.so.*' -print)
+    test -n "$library" || fail 'shared construction library is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'shared construction library is ambiguous'
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected libmpc'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libmpc.so.3]' >/dev/null || \
+      fail 'libmpc SONAME differs from admitted ABI'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libmpfr.so.6]' >/dev/null || \
+      fail 'libmpc does not retain MPFR runtime authority'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgmp.so.10]' >/dev/null || \
+      fail 'libmpc does not retain GMP runtime authority'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'libmpc carries a construction search path'
+    fi
+check:
+  language: posix-shell
+  script: |
+    set -eu
+
+    fail()
+    {
+      printf '%s\n' "mpc-bootstrap check: $*" >&2
+      exit 1
+    }
+
+    [ "$(sha256sum "$PKG_SOURCE_ROOT/mpc-1.4.1.tar.xz" | awk '{print $1}')" = \
+      91204cd32f164bd3b7c992d4a6a8ce6519511aadab30f78b6982d0bf8d73e931 ] || \
+      fail 'retained MPC source digest differs from admission'
+
+    gmp="$PKG_CHECK_INPUT_ROOT/gmp-bootstrap/usr"
+    mpfr="$PKG_CHECK_INPUT_ROOT/mpfr-bootstrap/usr"
+    test -f "$gmp/include/gmp.h" || fail 'GMP check header is absent'
+    test -f "$mpfr/include/mpfr.h" || fail 'MPFR check header is absent'
+    library=$(find "$PKG_PACKAGE_ROOT/usr/lib" -maxdepth 1 -type f \
+      -name 'libmpc.so.*' -print)
+    test -n "$library" || fail 'libmpc shared object is absent'
+    test "$(printf '%s\n' "$library" | wc -l | tr -d ' ')" = 1 || \
+      fail 'libmpc shared object is ambiguous'
+    dynamic=$(readelf -d "$library") || fail 'readelf rejected sealed libmpc'
+    printf '%s\n' "$dynamic" | grep -F 'Library soname: [libmpc.so.3]' >/dev/null || \
+      fail 'sealed libmpc SONAME differs'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libmpfr.so.6]' >/dev/null || \
+      fail 'sealed libmpc lost MPFR runtime authority'
+    printf '%s\n' "$dynamic" | grep -F 'Shared library: [libgmp.so.10]' >/dev/null || \
+      fail 'sealed libmpc lost GMP runtime authority'
+    if printf '%s\n' "$dynamic" | grep -E '\((RPATH|RUNPATH)\)' >/dev/null; then
+      fail 'sealed libmpc carries a construction search path'
+    fi
+
+    cat >/tmp/mpc-bootstrap-check.c <<'C'
+    #include <mpc.h>
+    int main(void)
+    {
+      mpc_t value;
+      mpc_init2(value, 64);
+      mpc_set_ui(value, 7, MPC_RNDNN);
+      mpc_add_ui(value, value, 5, MPC_RNDNN);
+      int okay = mpc_cmp_si_si(value, 12, 0) == 0;
+      mpc_clear(value);
+      return okay ? 0 : 1;
+    }
+    C
+    cc -I"$PKG_PACKAGE_ROOT/usr/include" -I"$mpfr/include" -I"$gmp/include" \
+      /tmp/mpc-bootstrap-check.c \
+      -L"$PKG_PACKAGE_ROOT/usr/lib" -L"$mpfr/lib" -L"$gmp/lib" \
+      -lmpc -lmpfr -lgmp -o /tmp/mpc-bootstrap-check
+    LD_LIBRARY_PATH="$PKG_PACKAGE_ROOT/usr/lib:$mpfr/lib:$gmp/lib" \
+      /tmp/mpc-bootstrap-check || \
+      fail 'sealed MPC development/runtime authority is not executable'
+architectures:
+  build: [x86_64]
+  target: [x86_64]
