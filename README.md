@@ -153,18 +153,14 @@ or rootfs composition policy.
 
 ## Scope exclusions
 
-`acl`, `attr`, `lz4`, `zlib`, and `zstd` remain ordinary system/runtime or
+`acl`, `attr`, `lz4`, `xz`, `zlib`, and `zstd` remain ordinary system/runtime or
 optional toolchain-support packages rather than currently proven seed-retirement
 substrate and do not belong to this collection. Source archive compression does
 not imply an installed compression-tool dependency: archive realization is owned
-by the native source adapter.
-
-`xz` is different: the product construction capability probe now explicitly
-requires the `xz` command to compress and decompress data after seed retirement.
-That requirement—not the `.tar.xz` spelling of package sources—places an
-`xz-bootstrap` node on the forthcoming construction graph. Its recipe is deferred
-to the next construction-tool layer rather than smuggled into this first
-arithmetic/linker slice.
+by the native build/source boundary. The current `seed-probe` exercises `xz` only
+to qualify S0 itself; that historical-seed requirement is not post-handoff
+construction authority. Admit an `xz-bootstrap` recipe only if a sealed native
+construction workload later proves an executable `xz` edge.
 
 Product qualification packages such as historical bootstrap seed/runtime probes
 are not distribution packages and do not belong here. Build/documentation tools

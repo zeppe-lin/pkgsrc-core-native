@@ -64,7 +64,7 @@ for construction_only in (
 if re.search(r'^  construction:', profiles, re.MULTILINE):
     fail('partial seed-retirement substrate was prematurely admitted as @construction')
 
-for misplaced in ('acl', 'attr', 'lz4', 'zlib', 'zstd'):
+for misplaced in ('acl', 'attr', 'lz4', 'xz', 'zlib', 'zstd'):
     if (ROOT / misplaced / 'recipe.yml').exists():
         fail(f'unproven non-foundation recipe {misplaced} returned below the seed boundary')
 
