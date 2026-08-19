@@ -117,8 +117,8 @@ filesystem ---------------------> glibc
 glibc -> gmp-bootstrap -> mpfr-bootstrap -> mpc-bootstrap
    `--> binutils-bootstrap
 
-glibc + linux-api-headers + GMP/MPFR/MPC --build--> gcc-bootstrap
-gcc-bootstrap --run--> glibc + linux-api-headers + binutils-bootstrap
+filesystem + glibc + linux-api-headers + GMP/MPFR/MPC --build--> gcc-bootstrap
+gcc-bootstrap --run--> filesystem + glibc + linux-api-headers + binutils-bootstrap
 ```
 
 `glibc-bootstrap`, `gmp-bootstrap`, `mpfr-bootstrap`, `mpc-bootstrap`,
@@ -132,10 +132,10 @@ Binutils distribution package: only the assembler/linker/archive/ELF tools
 required by the construction capability contract survive into its payload, and
 optional zlib, zstd, libelf, Jansson, gold, and gprofng authority is excluded.
 
-`gcc-bootstrap` is the first compiler-side handoff sensor. It consumes final
-`glibc`, exact Linux UAPI headers, plus exact static GMP/MPFR/MPC build inputs,
-derives one temporary target sysroot from the separately admitted glibc and
-Linux-header package trees, and installs C and C++ compiler
+`gcc-bootstrap` is the first compiler-side handoff sensor. It consumes exact
+merged-/usr `filesystem` topology, final `glibc`, exact Linux UAPI headers,
+plus exact static GMP/MPFR/MPC build inputs, derives one temporary target
+sysroot from those separately admitted package trees, and installs C and C++ compiler
 machinery with static target compiler support, and names `/usr/bin/as` and
 `/usr/bin/ld` as execution-root coordinates. Binutils is consequently runtime
 construction authority rather than a fake build-order edge: the S0-assisted

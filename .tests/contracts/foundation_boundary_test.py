@@ -112,9 +112,9 @@ bootstrap_authority = {
     'gcc-bootstrap': {
         'version': '16.1.0',
         'sha256': '50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79',
-        'build': ['glibc', 'linux-api-headers', 'gmp-bootstrap', 'mpfr-bootstrap', 'mpc-bootstrap'],
-        'check': ['glibc', 'linux-api-headers', 'binutils-bootstrap'],
-        'run': ['glibc', 'linux-api-headers', 'binutils-bootstrap'],
+        'build': ['filesystem', 'glibc', 'linux-api-headers', 'gmp-bootstrap', 'mpfr-bootstrap', 'mpc-bootstrap'],
+        'check': ['filesystem', 'glibc', 'linux-api-headers', 'binutils-bootstrap'],
+        'run': ['filesystem', 'glibc', 'linux-api-headers', 'binutils-bootstrap'],
     },
 }
 for name, authority in bootstrap_authority.items():
@@ -143,7 +143,7 @@ for fragment in (
 gcc_bootstrap = (ROOT / 'gcc-bootstrap' / 'recipe.yml').read_text(
     encoding='utf-8')
 for fragment in (
-        '  release: 2',
+        '  release: 3',
         '--with-sysroot=/', '--with-build-sysroot="$sysroot"',
         '--with-native-system-header-dir=/usr/include',
         '--with-as=/usr/bin/as', '--with-ld=/usr/bin/ld',
@@ -153,9 +153,14 @@ for fragment in (
         'shared compiler runtime escaped into bootstrap compiler payload',
         'installed compiler search authority retains bootstrap coordinates',
         'installed compiler does not use the execution root as sysroot',
+        'filesystem /lib64 authority is absent',
         'target sysroot authority collision',
+        'composed target sysroot lost /lib64 topology',
+        'composed target sysroot cannot resolve the glibc loader',
         'composed target sysroot lost Linux UAPI authority',
         'check sysroot authority collision',
+        'composed check sysroot lost /lib64 topology',
+        'composed check sysroot cannot resolve the glibc loader',
         'sealed C compiler rejected admitted target sysroot/binutils authority',
         'sealed C++ compiler rejected admitted target sysroot/binutils authority'):
     if fragment not in gcc_bootstrap:

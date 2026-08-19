@@ -24,7 +24,7 @@ and Binutils must remain a narrow construction payload without zlib, zstd,
 libelf, Jansson, libstdc++, gprofng, or persistent build-path authority. The
 multiprecision packages must retain the ABI SONAME and static construction
 surfaces consumed by `gcc-bootstrap`. The compiler-bootstrap contract then
-requires an explicitly composed final-glibc + Linux-UAPI build sysroot, direct Linux-header authority in BUILD/CHECK/RUN, explicit execution-root
+requires an explicitly composed filesystem-topology + final-glibc + Linux-UAPI build sysroot, direct filesystem/Linux-header authority in BUILD/CHECK/RUN, explicit execution-root
 assembler/linker coordinates, C/C++ plus static target support, no LTO/shared bootstrap runtime,
 no retained build/seed search coordinates, and direct check witnesses compiled
 with the exact admitted glibc and Binutils inputs. This still does not create a
