@@ -25,12 +25,15 @@ libelf, Jansson, libstdc++, gprofng, or persistent build-path authority. The
 multiprecision packages must retain the ABI SONAME and static construction
 surfaces consumed by `gcc-bootstrap`. The compiler-bootstrap contract then
 requires an explicitly composed filesystem-topology + final-glibc + Linux-UAPI build sysroot, direct filesystem/Linux-header authority in BUILD/CHECK/RUN, explicit execution-root
-assembler/linker coordinates, C/C++ plus static target support, normalization of
-GCC target-library staging out of filesystem-owned `/usr/lib64`, no forced
+assembler/linker coordinates, C/C++ plus static target support (including GCC 16's
+implicit static libatomic/as-needed link authority), normalization of GCC
+target-library staging out of filesystem-owned `/usr/lib64`, no forced
 rewriting of valid upstream driver entry points, loader coordinates that must
 resolve through the admitted target root, no LTO/shared bootstrap runtime, no
 retained build/seed search coordinates, and direct check witnesses compiled
-with the exact admitted glibc and Binutils inputs. This still does not create a
+with the exact admitted glibc and Binutils inputs. The check includes a 128-bit
+atomic witness so a present-but-useless libatomic archive cannot satisfy the
+handoff contract. This still does not create a
 complete shell/userspace execution universe, so the contract deliberately
 rejects an `@construction` profile while this closure remains incomplete.
 

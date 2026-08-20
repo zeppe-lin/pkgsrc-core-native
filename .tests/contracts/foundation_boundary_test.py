@@ -143,13 +143,14 @@ for fragment in (
 gcc_bootstrap = (ROOT / 'gcc-bootstrap' / 'recipe.yml').read_text(
     encoding='utf-8')
 for fragment in (
-        '  release: 4',
+        '  release: 5',
         '--with-sysroot=/', '--with-build-sysroot="$sysroot"',
         '--with-native-system-header-dir=/usr/include',
         '--with-as=/usr/bin/as', '--with-ld=/usr/bin/ld',
         '--disable-bootstrap', '--disable-fixincludes', '--disable-lto',
         '--disable-multilib', '--disable-shared', '--enable-languages=c,c++',
-        'all-target-libgcc', 'all-target-libstdc++-v3',
+        'all-target-libgcc', 'all-target-libatomic', 'all-target-libstdc++-v3',
+        'install-target-libatomic',
         'shared compiler runtime escaped into bootstrap compiler payload',
         'installed compiler search authority retains bootstrap coordinates',
         'installed compiler does not use the execution root as sysroot',
@@ -166,14 +167,21 @@ for fragment in (
         'driver entry is absent',
         'execution loader does not resolve through admitted target root',
         'static libstdc++ construction runtime is not canonical',
+        'static libatomic construction runtime is absent',
+        'GCC atomic as-needed link authority is absent',
         'composed check target root lacks sealed static libstdc++ authority',
+        'composed check target root lacks sealed static libatomic authority',
+        'composed check target root lacks sealed atomic as-needed authority',
         'sealed compiler resolves static libstdc++ outside admitted target root',
+        'sealed compiler resolves atomic as-needed runtime outside admitted target root',
         'sealed C compiler rejected admitted target sysroot/binutils authority',
+        'sealed C compiler cannot link its admitted static libatomic authority',
         'sealed C++ compiler rejected admitted target sysroot/binutils authority'):
     if fragment not in gcc_bootstrap:
         fail(f'gcc bootstrap boundary omits {fragment!r}')
 for forbidden in (
-        'download_prerequisites', '--with-system-zlib',
+        'download_prerequisites', '--with-system-zlib', '--disable-libatomic',
+        '-fno-link-libatomic',
         'ln -s g++ "$PKG_DESTDIR/usr/bin/c++"'):
     if forbidden in gcc_bootstrap:
         fail(f'gcc bootstrap imports ambient/upstream convenience authority: {forbidden!r}')

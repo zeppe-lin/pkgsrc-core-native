@@ -136,14 +136,18 @@ optional zlib, zstd, libelf, Jansson, gold, and gprofng authority is excluded.
 merged-/usr `filesystem` topology, final `glibc`, exact Linux UAPI headers,
 plus exact static GMP/MPFR/MPC build inputs, derives one temporary target
 sysroot from those separately admitted package trees, and installs C and C++ compiler
-machinery with static target compiler support, and names `/usr/bin/as` and
-`/usr/bin/ld` as execution-root coordinates. Binutils is consequently runtime
+machinery with static target compiler support, including GCC 16's target
+`libatomic`/`libatomic_asneeded` authority, and names `/usr/bin/as` and `/usr/bin/ld`
+as execution-root coordinates. Binutils is consequently runtime
 construction authority rather than a fake build-order edge: the S0-assisted
 build may use S0 tools, while the same compiler paths resolve to
 `binutils-bootstrap` only after the product admits a new native construction
 root. The installed compiler must use `/` as its semantic sysroot, retain no
 build-input/workspace search paths, and carry no dynamic libstdc++, libgcc,
-GMP/MPFR/MPC, or zstd dependency in its compiler frontends. GCC's target-library
+libatomic, GMP/MPFR/MPC, or zstd dependency in its compiler frontends. GCC 16
+implicitly links libatomic on supported GNU/Linux targets; the handoff therefore
+builds/seals the matching static target library and as-needed archive name rather
+than suppressing that compiler capability with `-fno-link-libatomic`. GCC's target-library
 installer may stage the one admitted x86_64 variant through `/usr/lib64`; the
 recipe normalizes those objects into canonical `/usr/lib` and refuses to publish
 inside filesystem-owned merged-/usr aliases. Upstream-installed `cc`/`c++`

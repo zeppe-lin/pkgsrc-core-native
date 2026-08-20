@@ -5,7 +5,7 @@ format: zeppe-lin.recipe/1
 package:
   name: gcc-bootstrap
   version: 16.1.0
-  release: 4
+  release: 5
   summary: GCC C and C++ construction compiler authority
   homepage: https://gcc.gnu.org/
   licenses:
@@ -151,11 +151,16 @@ build:
     # This is a seed-built handoff compiler, not final GCC. Build only the C/C++
     # compiler machinery and the static target support required to make it a
     # self-contained construction capability after S0 execution is revoked.
+    # GCC 16 implicitly links libatomic on supported GNU/Linux targets, so the
+    # handoff must carry the matching static target libatomic authority instead
+    # of disabling the driver's admitted implicit atomic-link capability.
     make -j "$PKG_JOBS" all-gcc
     make -j "$PKG_JOBS" all-target-libgcc
+    make -j "$PKG_JOBS" all-target-libatomic
     make -j "$PKG_JOBS" all-target-libstdc++-v3
     make DESTDIR="$PKG_DESTDIR" install-gcc
     make DESTDIR="$PKG_DESTDIR" install-target-libgcc
+    make DESTDIR="$PKG_DESTDIR" install-target-libatomic
     make DESTDIR="$PKG_DESTDIR" install-target-libstdc++-v3
 
     rm -rf "$PKG_DESTDIR/usr/share"
@@ -199,11 +204,12 @@ build:
       [ ! -e "$path" ] || fail "final payload retains merged-/usr object $alias"
     done
 
-    # A bootstrap compiler may carry private static compiler/runtime support,
-    # but it must not compete with stable libgcc or create an interim shared
-    # libstdc++ runtime package. The final toolchain owns those shared ABIs.
+    # A bootstrap compiler may carry private/static compiler runtime support,
+    # but it must not compete with stable libgcc or create interim shared
+    # libstdc++/libatomic runtime packages. The final toolchain owns those shared
+    # ABIs.
     if find "$PKG_DESTDIR" -type f -o -type l | \
-        grep -E '/(libgcc_s|libstdc\+\+)\.so([.]|$)' >/dev/null; then
+        grep -E '/(libgcc_s|libstdc\+\+|libatomic)\.so([.]|$)' >/dev/null; then
       fail 'shared compiler runtime escaped into bootstrap compiler payload'
     fi
 
@@ -244,6 +250,10 @@ build:
       fail 'static libstdc++ construction runtime is ambiguous'
     test "$libstdcxx" = "$PKG_DESTDIR/usr/lib/libstdc++.a" ||
       fail 'static libstdc++ construction runtime is not canonical'
+    test -f "$PKG_DESTDIR/usr/lib/libatomic.a" ||
+      fail 'static libatomic construction runtime is absent'
+    test -f "$PKG_DESTDIR/usr/lib/libatomic_asneeded.a" ||
+      fail 'GCC atomic as-needed link authority is absent'
 
     test -x "$compiler_dir/collect2" || fail 'link driver is absent'
 
@@ -258,7 +268,7 @@ build:
         fail "${program##*/} carries a construction search path"
       fi
       if printf '%s\n' "$dynamic" | grep -E \
-          'Shared library: \[(libstdc\+\+|libgcc_s|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
+          'Shared library: \[(libstdc\+\+|libgcc_s|libatomic|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
           >/dev/null; then
         fail "${program##*/} retains seed/external compiler-runtime authority"
       fi
@@ -363,10 +373,14 @@ check:
       target="$check_sysroot/usr/lib/${library##*/}"
       test ! -e "$target" && test ! -L "$target" ||
         fail "check target-root static-library collision: ${library##*/}"
-      install -m 0644 "$library" "$target"
+      cp -a -- "$library" "$target"
     done
     test -f "$check_sysroot/usr/lib/libstdc++.a" ||
       fail 'composed check target root lacks sealed static libstdc++ authority'
+    test -f "$check_sysroot/usr/lib/libatomic.a" ||
+      fail 'composed check target root lacks sealed static libatomic authority'
+    test -f "$check_sysroot/usr/lib/libatomic_asneeded.a" ||
+      fail 'composed check target root lacks sealed atomic as-needed authority'
 
     test "$($gcc -print-sysroot)" = / || fail 'sealed compiler sysroot differs from execution root'
     test "$($gcc -print-prog-name=as)" = /usr/bin/as || \
@@ -375,8 +389,10 @@ check:
       fail 'sealed compiler linker coordinate differs from /usr/bin/ld'
     private_libgcc=$($gcc -print-libgcc-file-name)
     private_libstdcxx=$($gxx --sysroot="$check_sysroot" -print-file-name=libstdc++.a)
+    private_libatomic=$($gcc --sysroot="$check_sysroot" -print-file-name=libatomic_asneeded.a)
     test -f "$private_libgcc" || fail 'sealed compiler private libgcc is unresolved'
     test -f "$private_libstdcxx" || fail 'sealed compiler static libstdc++ is unresolved'
+    test -f "$private_libatomic" || fail 'sealed compiler atomic as-needed runtime is unresolved'
     case $private_libgcc in
       "$PKG_PACKAGE_ROOT"/*) ;;
       *) fail 'sealed compiler resolves private libgcc outside its package authority' ;;
@@ -384,6 +400,10 @@ check:
     case $private_libstdcxx in
       "$check_sysroot"/*) ;;
       *) fail 'sealed compiler resolves static libstdc++ outside admitted target root' ;;
+    esac
+    case $private_libatomic in
+      "$check_sysroot"/*) ;;
+      *) fail 'sealed compiler resolves atomic as-needed runtime outside admitted target root' ;;
     esac
 
     search=$($gcc -print-search-dirs)
@@ -411,7 +431,7 @@ check:
         fail "sealed ${program##*/} carries a construction search path"
       fi
       if printf '%s\n' "$dynamic" | grep -E \
-          'Shared library: \[(libstdc\+\+|libgcc_s|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
+          'Shared library: \[(libstdc\+\+|libgcc_s|libatomic|libgmp|libmpfr|libmpc|libz|libzstd)\.so' \
           >/dev/null; then
         fail "sealed ${program##*/} retains seed/external compiler-runtime authority"
       fi
@@ -436,6 +456,19 @@ check:
       /tmp/gcc-bootstrap-check.c -o /tmp/gcc-bootstrap-check-c || \
       fail 'sealed C compiler rejected admitted target sysroot/binutils authority'
 
+    cat >/tmp/gcc-bootstrap-check-atomic.c <<'C'
+    static unsigned __int128 value;
+    int main(void)
+    {
+      unsigned __int128 expected = 0;
+      return __atomic_compare_exchange_n(
+          &value, &expected, 1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST) ? 0 : 1;
+    }
+    C
+    "$gcc" -std=gnu11 --sysroot="$check_sysroot" -B"$binutils/" \
+      /tmp/gcc-bootstrap-check-atomic.c -o /tmp/gcc-bootstrap-check-atomic || \
+      fail 'sealed C compiler cannot link its admitted static libatomic authority'
+
     cat >/tmp/gcc-bootstrap-check.cpp <<'CXX'
     #include <cstdio>
     int main()
@@ -447,7 +480,10 @@ check:
       /tmp/gcc-bootstrap-check.cpp -o /tmp/gcc-bootstrap-check-cxx || \
       fail 'sealed C++ compiler rejected admitted target sysroot/binutils authority'
 
-    for binary in /tmp/gcc-bootstrap-check-c /tmp/gcc-bootstrap-check-cxx; do
+    for binary in \
+        /tmp/gcc-bootstrap-check-c \
+        /tmp/gcc-bootstrap-check-atomic \
+        /tmp/gcc-bootstrap-check-cxx; do
       "$binutils/readelf" -l "$binary" | \
         grep -F 'Requesting program interpreter: /lib64/ld-linux-x86-64.so.2' \
         >/dev/null || fail 'compiled witness names the wrong target loader'
